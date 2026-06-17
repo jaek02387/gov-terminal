@@ -34,6 +34,10 @@ def get_bills() -> dict:
     rows, source = _active_bills()
     # Most-recent action first; missing dates sort last.
     rows.sort(key=lambda b: b.get("latest_action_date") or "", reverse=True)
+    watched = db.watched_keys()
+    for b in rows:
+        b["key"] = b.get("_key")
+        b["watched"] = b.get("_key") in watched
     return {
         "bills": rows[:MAX_ROWS],
         "total": len(rows),

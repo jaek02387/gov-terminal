@@ -89,6 +89,11 @@ appear. After that, the cache refreshes automatically every
   computed by diffing each hourly pull against the previous one in SQLite. Shows
   the `old → new` transition and when it was detected. Brand-new bills are not
   movers; only real stage transitions appear.
+- **Watchlist — Tracked Bills** — specific bills you follow. Click the ☆ on any
+  bill in the feed to watch it, or add any bill by number (e.g. `HR 1215`) — even
+  ones not in the priority feed (fetched individually and kept current on the
+  hourly refresh). A watched bill whose stage changes is **highlighted** with the
+  `old → new` transition.
 - **Last updated / next refresh** indicator in the header.
 - **Refresh now** button (manual refresh) and **A− / A+** text-size controls;
   fully keyboard navigable with a skip link.
@@ -172,6 +177,9 @@ rm -f cache.db cache.db-wal cache.db-shm
 | DELETE | `/api/stocks/{ticker}` | Remove a ticker from the interface |
 | GET    | `/api/bills`   | Cached priority bills (Congress.gov → LegiScan) |
 | GET    | `/api/movers`  | Bills whose stage changed (snapshot diff) |
+| GET    | `/api/watchlist` | Watched bills + status-change highlights |
+| POST   | `/api/watchlist/add` | Watch a bill (`{"key":...}` or `{"identifier":"HR 1215"}`) |
+| DELETE | `/api/watchlist/{key}` | Stop watching a bill |
 | POST   | `/api/refresh` | Trigger an immediate refresh             |
 
 ## Security

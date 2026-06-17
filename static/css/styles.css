@@ -372,6 +372,30 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 .mover-arrow { color: var(--fg-dim); font-weight: bold; }
 .mover-when { font-size: 0.75rem; color: var(--fg-dim); margin-left: auto; }
 
+/* Watch (star) toggle + status-change highlight */
+.watch-btn {
+  background: transparent;
+  border: none;
+  padding: 0 0.2rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.watch-btn:hover { color: #ffd24c; }
+.watch-btn.watching { color: #ffd24c; }
+.bill-changed {
+  border-left: 3px solid var(--up);
+  padding-left: 0.5rem;
+  background: rgba(76, 195, 255, 0.06);
+}
+.changed-badge {
+  font-size: 0.72rem;
+  font-weight: bold;
+  color: var(--up);
+  white-space: nowrap;
+}
+
 /* Stage badge: text label is always present (never colour-only). */
 .stage-badge {
   font-size: 0.7rem;

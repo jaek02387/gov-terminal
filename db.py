@@ -94,6 +94,15 @@ def init_db() -> None:
                 ticker TEXT PRIMARY KEY,
                 name   TEXT NOT NULL
             );
+
+            -- Bills the user is explicitly watching (key = "congress-type-number").
+            CREATE TABLE IF NOT EXISTS watchlist (
+                bill_key TEXT PRIMARY KEY,
+                congress TEXT,
+                type     TEXT,
+                number   TEXT,
+                added_at TEXT NOT NULL
+            );
             """
         )
     log.info("database initialised at %s", config.DB_PATH)
@@ -214,6 +223,14 @@ def delete_snapshot_item(source: str, item_key: str) -> None:
         )
 
 
+def delete_changes(source: str, item_key: str) -> None:
+    """Drop a single item's change history (e.g. when un-watching a bill)."""
+    with _lock, get_conn() as c:
+        c.execute(
+            "DELETE FROM changes WHERE source=? AND item_key=?", (source, item_key)
+        )
+
+
 # ---------------------------------------------------------------------------
 # User-added tickers + hidden built-in tickers (interface customisation)
 # ---------------------------------------------------------------------------
@@ -289,6 +306,44 @@ def set_name(ticker: str, name: str) -> None:
 def get_names() -> dict[str, str]:
     with get_conn() as c:
         return {r["ticker"]: r["name"] for r in c.execute("SELECT ticker,name FROM ticker_names")}
+
+
+# ---------------------------------------------------------------------------
+# Watchlist (specific bills the user tracks)
+# ---------------------------------------------------------------------------
+def add_watchlist(bill_key: str, congress, btype: str, number: str) -> None:
+    with _lock, get_conn() as c:
+        c.execute(
+            "INSERT INTO watchlist(bill_key,congress,type,number,added_at) "
+            "VALUES (?,?,?,?,?) ON CONFLICT(bill_key) DO NOTHING",
+            (bill_key, str(congress), btype, str(number), _now()),
+        )
+
+
+def remove_watchlist(bill_key: str) -> None:
+    with _lock, get_conn() as c:
+        c.execute("DELETE FROM watchlist WHERE bill_key=?", (bill_key,))
+
+
+def list_watchlist() -> list[dict]:
+    with get_conn() as c:
+        rows = c.execute(
+            "SELECT bill_key, congress, type, number, added_at FROM watchlist"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def watched_keys() -> set[str]:
+    with get_conn() as c:
+        return {r["bill_key"] for r in c.execute("SELECT bill_key FROM watchlist")}
+
+
+def is_watched(bill_key: str) -> bool:
+    with get_conn() as c:
+        return (
+            c.execute("SELECT 1 FROM watchlist WHERE bill_key=?", (bill_key,)).fetchone()
+            is not None
+        )
 
 
 def read_changes(source: str, limit: int = 100) -> list[dict]:
