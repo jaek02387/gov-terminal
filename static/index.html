@@ -24,7 +24,17 @@
   </header>
 
   <main id="main" role="main">
-    <div id="panels"></div>
+    <!-- 2x2 dashboard of panel quadrants -->
+    <div id="dashboard"></div>
+
+    <!-- Full-screen expanded view of a single panel (toggled by "See more") -->
+    <section id="expanded" hidden aria-label="Expanded panel view">
+      <div class="expanded-bar">
+        <button id="expanded-back" type="button">&larr; Back to dashboard</button>
+        <h2 id="expanded-title"></h2>
+      </div>
+      <div id="expanded-body" class="panel-body"></div>
+    </section>
   </main>
 
   <script type="module" src="/static/js/app.js"></script>

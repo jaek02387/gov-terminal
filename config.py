@@ -6,6 +6,7 @@ and are never hardcoded.
 """
 from __future__ import annotations
 
+import datetime
 import os
 from pathlib import Path
 
@@ -107,12 +108,21 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
 # ---------------------------------------------------------------------------
 WATCHLIST_BILLS: list[dict] = []
 
-# Search terms used by the Congress.gov bill feed (broad federal-priority topics).
+# Which Congress to track. Computed for "now" (e.g. 119th for 2025-2026); edit
+# if you want to pin a specific one. New congress every 2 years, odd-year start.
+CURRENT_CONGRESS = (datetime.date.today().year - 1789) // 2 + 1
+
+# Only substantive legislation (bills + joint resolutions). Excludes simple and
+# concurrent resolutions, which are mostly ceremonial/procedural noise.
+SUBSTANTIVE_BILL_TYPES = ["hr", "s", "hjres", "sjres"]
+
+# Title keywords used to keep bills relevant to the federal priorities above.
+# Matched as whole words (so "defense" won't catch "self-defense"). Edit freely.
 BILL_SEARCH_TERMS: list[str] = [
-    "defense",
-    "nuclear",
-    "critical minerals",
-    "energy",
-    "semiconductor",
-    "shipbuilding",
+    "defense", "defense industrial", "missile", "munitions", "shipbuilding",
+    "shipyard", "naval", "submarine", "nuclear", "reactor", "uranium",
+    "enrichment", "critical mineral", "critical minerals", "rare earth",
+    "mining", "battery", "semiconductor", "chip", "artificial intelligence",
+    "data center", "energy", "natural gas", "pipeline", "grid", "drone",
+    "unmanned", "satellite", "space launch", "pharmaceutical", "supply chain",
 ]

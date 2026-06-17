@@ -5,8 +5,9 @@ in SQLite and serves a dependency-light HTML/CSS/JS frontend. A background job
 refreshes the cache hourly; the UI always reads from the cache, so it is instant
 and never blocks on a live API.
 
-> **Status:** Phase 1 complete — the **Stocks panel** is built end to end.
-> Bill panels (Congress.gov / LegiScan / Federal Register) are the next phases.
+> **Status:** Phases 1–2 complete. **Stocks panel** + **Bills feed** + **Bill
+> movers** are built end to end. Watchlist, search/filter, and the lazy bill
+> detail view are the next phases.
 
 ## Architecture
 
@@ -79,9 +80,23 @@ appear. After that, the cache refreshes automatically every
   SQLite (`ticker_names`), so the hourly price refresh stays lightweight.
   Direction is shown three ways so it is **colourblind-safe**: colour **and** a
   `+`/`-` sign **and** a ▲/▼ glyph, with screen-reader labels.
+- **Bills — Federal Priorities** — recently-updated bills whose titles match the
+  priority topics in `config.py` (`BILL_SEARCH_TERMS`), newest action first, each
+  with a labelled stage badge (Introduced → In Committee → … → Became Law). Data
+  from Congress.gov (primary); LegiScan is a dormant fallback. Requires
+  `CONGRESS_API_KEY` — without it the panel shows a "key needed" hint.
+- **Bill Movers — Status Changes** — bills whose stage changed between snapshots,
+  computed by diffing each hourly pull against the previous one in SQLite. Shows
+  the `old → new` transition and when it was detected. Brand-new bills are not
+  movers; only real stage transitions appear.
 - **Last updated / next refresh** indicator in the header.
 - **Refresh now** button (manual refresh) and **A− / A+** text-size controls;
   fully keyboard navigable with a skip link.
+- **2×2 dashboard layout** — each panel occupies one quadrant of the screen and
+  scrolls independently. A **"See more"** button on each panel opens it
+  full-screen in-app (Esc or "Back to dashboard" to return). The bottom-right
+  quadrant is reserved for the upcoming Watchlist panel; panels auto-place by
+  discovery order, so new ones drop in with no layout changes.
 
 ### Adding & removing stocks at runtime
 
@@ -155,6 +170,8 @@ rm -f cache.db cache.db-wal cache.db-shm
 | GET    | `/api/stocks/search?q=` | Typeahead suggestions (symbol/name) |
 | POST   | `/api/stocks/add` | Add a ticker (`{"ticker":"AAPL"}`), auto-sorted |
 | DELETE | `/api/stocks/{ticker}` | Remove a ticker from the interface |
+| GET    | `/api/bills`   | Cached priority bills (Congress.gov → LegiScan) |
+| GET    | `/api/movers`  | Bills whose stage changed (snapshot diff) |
 | POST   | `/api/refresh` | Trigger an immediate refresh             |
 
 ## Security

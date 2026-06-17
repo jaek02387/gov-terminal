@@ -1,9 +1,20 @@
-// App shell: refresh indicator, text-size controls, and generic panel loading.
-// Panels are discovered from /api/meta; each panel's JS module lives at
-// /static/js/panels/<id>.js and exports `render(container)`.
+// App shell: refresh indicator, text-size controls, and a 2x2 dashboard of
+// auto-discovered panels. Each quadrant scrolls independently and has a
+// "See more" button that opens the panel full-screen (in-app, no reload).
 
-const panelsEl = document.getElementById("panels");
 const indicator = document.getElementById("refresh-indicator");
+const dashboard = document.getElementById("dashboard");
+const expanded = document.getElementById("expanded");
+const expandedBody = document.getElementById("expanded-body");
+const expandedTitle = document.getElementById("expanded-title");
+
+// Labels for reserved (not-yet-built) quadrants, in fill order. When a real
+// panel ships it occupies the slot and the matching placeholder disappears.
+const PLANNED_PANELS = ["Watchlist"];
+
+let panelMeta = [];          // [{id, title, order}, ...]
+const panelMods = {};        // id -> imported module (cached)
+let expandedId = null;       // id of the currently expanded panel, or null
 
 function fmtTime(iso) {
   if (!iso) return "never";
@@ -26,28 +37,97 @@ async function loadMeta() {
   }
 }
 
-async function loadPanels(meta) {
-  panelsEl.innerHTML = "";
-  for (const p of meta.panels || []) {
-    const section = document.createElement("section");
-    section.className = "panel";
-    section.setAttribute("tabindex", "-1");
-    section.innerHTML =
-      `<h2 id="panel-${p.id}">${p.title}</h2>` +
-      `<div class="panel-body" id="body-${p.id}">Loading…</div>`;
-    panelsEl.appendChild(section);
-
-    const body = section.querySelector(`#body-${p.id}`);
-    try {
-      const mod = await import(`/static/js/panels/${p.id}.js`);
-      await mod.render(body);
-    } catch (e) {
-      body.innerHTML = `<div class="error-box">Panel "${p.id}" failed to load: ${e}</div>`;
-      console.error(`panel ${p.id} failed`, e);
-    }
+// --- rendering ------------------------------------------------------------
+async function renderPanelInto(p, container) {
+  container.innerHTML = "Loading…";
+  try {
+    const mod = panelMods[p.id] || (await import(`/static/js/panels/${p.id}.js`));
+    panelMods[p.id] = mod;
+    await mod.render(container);
+  } catch (e) {
+    container.innerHTML = `<div class="error-box">Panel "${p.id}" failed to load: ${e}</div>`;
+    console.error(`panel ${p.id} failed`, e);
   }
 }
 
+function makePanelCell(p) {
+  const sec = document.createElement("section");
+  sec.className = "panel quad";
+  sec.id = `quad-${p.id}`;
+  sec.setAttribute("tabindex", "-1");
+  sec.innerHTML =
+    `<h2 id="panel-${p.id}">${p.title}</h2>` +
+    `<div class="panel-body" id="body-${p.id}">Loading…</div>` +
+    `<div class="panel-foot">` +
+    `<button class="see-more" type="button" data-id="${p.id}" ` +
+    `aria-label="Expand ${p.title}">See more</button></div>`;
+  sec.querySelector(".see-more").addEventListener("click", () => openExpanded(p.id));
+  return sec;
+}
+
+function makePlaceholderCell(label) {
+  const sec = document.createElement("section");
+  sec.className = "panel quad quad-placeholder";
+  sec.innerHTML =
+    `<h2>${label}</h2>` +
+    `<div class="panel-body"><p class="muted">Coming soon.</p></div>`;
+  return sec;
+}
+
+async function loadDashboard(meta) {
+  panelMeta = meta.panels || [];
+  dashboard.innerHTML = "";
+
+  // Always lay out at least 4 quadrants; pad to an even count so rows fill.
+  const cellCount = Math.max(4, Math.ceil(panelMeta.length / 2) * 2);
+  for (let i = 0; i < cellCount; i++) {
+    const p = panelMeta[i];
+    if (p) {
+      dashboard.appendChild(makePanelCell(p));
+    } else {
+      const label = PLANNED_PANELS[i - panelMeta.length] || "Reserved";
+      dashboard.appendChild(makePlaceholderCell(label));
+    }
+  }
+
+  for (const p of panelMeta) {
+    await renderPanelInto(p, document.getElementById(`body-${p.id}`));
+  }
+}
+
+// --- expanded (full-screen) view -----------------------------------------
+async function openExpanded(id) {
+  const p = panelMeta.find((x) => x.id === id);
+  if (!p) return;
+  expandedId = id;
+  expandedTitle.textContent = p.title;
+  dashboard.hidden = true;
+  expanded.hidden = false;
+  await renderPanelInto(p, expandedBody);
+  document.getElementById("expanded-back").focus();
+}
+
+async function closeExpanded() {
+  const id = expandedId;
+  expandedId = null;
+  expanded.hidden = true;
+  expandedBody.innerHTML = "";
+  dashboard.hidden = false;
+  // Re-render the panel into its quadrant so its module rebinds to live DOM.
+  if (id) {
+    const p = panelMeta.find((x) => x.id === id);
+    if (p) await renderPanelInto(p, document.getElementById(`body-${p.id}`));
+    const btn = document.querySelector(`.see-more[data-id="${id}"]`);
+    if (btn) btn.focus();
+  }
+}
+
+document.getElementById("expanded-back").addEventListener("click", closeExpanded);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && expandedId) closeExpanded();
+});
+
+// --- refresh + text size --------------------------------------------------
 async function refreshNow(btn) {
   btn.disabled = true;
   const original = btn.textContent;
@@ -61,7 +141,6 @@ async function refreshNow(btn) {
   }
 }
 
-// --- Text size (resizable text for accessibility) -------------------------
 const root = document.documentElement;
 function setScale(scale) {
   const s = Math.min(1.8, Math.max(0.8, scale));
@@ -83,9 +162,10 @@ document
 
 async function boot() {
   const meta = await loadMeta();
-  await loadPanels(meta);
+  await loadDashboard(meta);
+  // Preserve the expanded view across a refresh.
+  if (expandedId) await openExpanded(expandedId);
 }
 
 boot();
-// Keep the indicator fresh without re-fetching panels.
-setInterval(loadMeta, 60000);
+setInterval(loadMeta, 60000); // keep the indicator fresh
