@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gov Policy Terminal</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="topbar" role="banner">
+    <h1>GOV&nbsp;POLICY&nbsp;TERMINAL</h1>
+    <div class="topbar-controls">
+      <div id="refresh-indicator" class="refresh-indicator" aria-live="polite">
+        Loading&hellip;
+      </div>
+      <button id="refresh-btn" type="button">Refresh now</button>
+      <div class="textsize" role="group" aria-label="Text size">
+        <button id="text-smaller" type="button" aria-label="Decrease text size">A&minus;</button>
+        <button id="text-larger" type="button" aria-label="Increase text size">A+</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" role="main">
+    <div id="panels"></div>
+  </main>
+
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gov-terminal",
+      "runtimeExecutable": "env/bin/uvicorn",
+      "runtimeArgs": ["main:app", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}

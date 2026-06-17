@@ -1,0 +1,23 @@
+# Secrets & local config
+.env
+
+# Virtualenv
+env/
+.venv/
+venv/
+
+# Local cache / SQLite snapshot (+ WAL sidecar files)
+cache.db
+cache.db-wal
+cache.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# OS
+.DS_Store
+
+# Claude Code machine-local settings (keep launch.json shared, ignore the rest)
+.claude/settings.local.json
