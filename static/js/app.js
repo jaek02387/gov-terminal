@@ -101,6 +101,12 @@ async function openExpanded(id) {
   if (!p) return;
   expandedId = id;
   expandedTitle.textContent = p.title;
+  // Empty the panel's quadrant copy first. Otherwise it keeps the same element
+  // ids (e.g. #stock-add-input, #stock-suggest), and document.getElementById in
+  // the panel code would target the hidden quadrant instead of the expanded
+  // view -- which breaks the typeahead/search. closeExpanded re-renders it.
+  const qbody = document.getElementById(`body-${id}`);
+  if (qbody) qbody.innerHTML = "";
   dashboard.hidden = true;
   expanded.hidden = false;
   await renderPanelInto(p, expandedBody);
