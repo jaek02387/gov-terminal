@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import bills
 import config
@@ -21,6 +22,7 @@ log = logging.getLogger("source.congress")
 API_BASE = "https://api.congress.gov/v3/bill"
 PAGE_SIZE = 250          # API max per request
 MAX_PAGES = 4            # pages of recent current-congress bills to scan
+REQUEST_TIMEOUT = 15     # seconds; fail fast instead of stalling the whole refresh
 
 
 def normalize_bill(raw: dict) -> dict | None:
@@ -98,7 +100,7 @@ def fetch_bill(congress, btype: str, number: str) -> dict | None:
     resp = requests.get(
         f"{API_BASE}/{congress}/{btype.lower()}/{number}",
         params={"api_key": config.CONGRESS_API_KEY, "format": "json"},
-        timeout=30,
+        timeout=REQUEST_TIMEOUT,
     )
     if resp.status_code == 404:
         return None
@@ -119,34 +121,20 @@ class CongressSource(Source):
     change_fields = ["stage"]  # a "mover" = a bill whose stage changed
 
     def fetch(self) -> list[dict]:
-        import requests
-
         if not config.CONGRESS_API_KEY:
             self.log.info("no CONGRESS_API_KEY -> nothing to fetch")
             return []
 
-        # Only the current Congress, so we don't surface decade-old bills whose
-        # metadata was merely re-touched.
-        url = f"{API_BASE}/{config.CURRENT_CONGRESS}"
+        # Fetch all pages concurrently (the pages are independent). pool.map
+        # re-raises on iteration, so a failed page fails the cycle as before --
+        # but now in ~one request's time, not the sum of all four.
+        with ThreadPoolExecutor(max_workers=MAX_PAGES) as pool:
+            pages = list(pool.map(self._fetch_page, range(MAX_PAGES)))
+
         kept: dict[str, dict] = {}
         scanned = 0
-
-        for page in range(MAX_PAGES):
-            resp = requests.get(
-                url,
-                params={
-                    "api_key": config.CONGRESS_API_KEY,
-                    "format": "json",
-                    "sort": "updateDate+desc",
-                    "limit": PAGE_SIZE,
-                    "offset": page * PAGE_SIZE,
-                },
-                timeout=20,
-            )
-            resp.raise_for_status()
-            page_bills = resp.json().get("bills", [])
+        for page_bills in pages:
             scanned += len(page_bills)
-
             for raw in page_bills:
                 if (raw.get("type") or "").lower() not in _SUBSTANTIVE:
                     continue  # skip ceremonial / procedural resolutions
@@ -157,11 +145,26 @@ class CongressSource(Source):
                 if rec is not None:
                     kept[rec["key"]] = rec
 
-            if len(page_bills) < PAGE_SIZE:
-                break  # no more pages
-
         self.log.info(
             "congress %s: scanned %d bills, kept %d matching priorities",
             config.CURRENT_CONGRESS, scanned, len(kept),
         )
         return list(kept.values())
+
+    def _fetch_page(self, page: int) -> list[dict]:
+        """Fetch one page of the current Congress's recent bills."""
+        import requests
+
+        resp = requests.get(
+            f"{API_BASE}/{config.CURRENT_CONGRESS}",
+            params={
+                "api_key": config.CONGRESS_API_KEY,
+                "format": "json",
+                "sort": "updateDate+desc",
+                "limit": PAGE_SIZE,
+                "offset": page * PAGE_SIZE,
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json().get("bills", [])

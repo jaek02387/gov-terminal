@@ -13,6 +13,7 @@ live API call.
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -35,11 +36,27 @@ scheduler = BackgroundScheduler()
 
 
 def refresh_all() -> list[dict]:
-    """Run every source once, in isolation, then stamp the global refresh time."""
+    """Run every source once, in isolation, then stamp the global refresh time.
+
+    Sources are grouped by ``phase``: those in the same phase run concurrently
+    (the slow part is network I/O), and phases run in order so a later source can
+    depend on an earlier one's fresh snapshot. SQLite writes serialise behind the
+    db lock, so concurrency is safe.
+    """
     log.info("=== refresh cycle starting ===")
-    results = []
+    phases: dict[int, list] = {}
     for src in sources.discover():
-        results.append(src.run())
+        phases.setdefault(getattr(src, "phase", 0), []).append(src)
+
+    results: list[dict] = []
+    for phase in sorted(phases):
+        group = phases[phase]
+        if len(group) == 1:
+            results.append(group[0].run())
+        else:
+            with ThreadPoolExecutor(max_workers=len(group)) as pool:
+                results.extend(pool.map(lambda s: s.run(), group))
+
     db.mark_global_refresh()
     ok = sum(1 for r in results if r["status"] == "ok")
     log.info("=== refresh cycle done: %d/%d ok ===", ok, len(results))

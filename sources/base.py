@@ -31,6 +31,9 @@ class Source(ABC):
     enabled: bool = True
     track_changes: bool = False
     change_fields: list[str] | None = None
+    # Refresh ordering: sources sharing a phase run in PARALLEL; lower phases run
+    # first. Use a later phase for a source that reads another's fresh snapshot.
+    phase: int = 0
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)

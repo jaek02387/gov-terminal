@@ -24,6 +24,7 @@ class WatchlistSource(Source):
     enabled = bool(config.CONGRESS_API_KEY)
     track_changes = True
     change_fields = ["stage"]
+    phase = 1  # run after the bill feed (phase 0) so it reuses a fresh snapshot
 
     def fetch(self) -> list[dict]:
         watched = db.list_watchlist()
