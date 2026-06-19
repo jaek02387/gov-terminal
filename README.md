@@ -94,6 +94,12 @@ appear. After that, the cache refreshes automatically every
   ones not in the priority feed (fetched individually and kept current on the
   hourly refresh). A watched bill whose stage changes is **highlighted** with the
   `old → new` transition.
+- **Bill detail view** — a **Details** button on any bill (feed, movers, or
+  watchlist) opens a full-screen view with the sponsor(s), cosponsors, CRS
+  summary, links to the official full text, recorded votes, and the complete
+  action/committee history. Fetched **lazily on click only** (never during the
+  hourly refresh), then cached for 6h so repeat opens are instant; if Congress.gov
+  is unreachable it serves a stale cached copy when available.
 - **Last updated / next refresh** indicator in the header.
 - **Refresh now** button (manual refresh) and **A− / A+** text-size controls;
   fully keyboard navigable with a skip link.
@@ -177,6 +183,7 @@ rm -f cache.db cache.db-wal cache.db-shm
 | DELETE | `/api/stocks/{ticker}` | Remove a ticker from the interface |
 | GET    | `/api/bills`   | Cached priority bills (Congress.gov → LegiScan) |
 | GET    | `/api/movers`  | Bills whose stage changed (snapshot diff) |
+| GET    | `/api/bills/detail/{key}` | Lazy full bill detail (cached 6h) |
 | GET    | `/api/watchlist` | Watched bills + status-change highlights |
 | POST   | `/api/watchlist/add` | Watch a bill (`{"key":...}` or `{"identifier":"HR 1215"}`) |
 | DELETE | `/api/watchlist/{key}` | Stop watching a bill |

@@ -31,6 +31,8 @@ function moverRow(m) {
     `<span class="stage-badge ${stageClass(m.from_stage)}">${esc(m.from_stage)}</span>` +
     `<span class="mover-arrow" aria-label="changed to">→</span>` +
     `<span class="stage-badge ${stageClass(m.to_stage)}">${esc(m.to_stage)}</span>` +
+    `<button class="detail-btn" data-key="${esc(m.key)}" data-id="${esc(m.identifier)}" ` +
+    `type="button" aria-label="Show details for ${esc(m.identifier)}">Details</button>` +
     `<span class="mover-when">${fmtWhen(m.detected_at)}</span>` +
     `</div>` +
     `<div class="bill-title">${title}</div>` +
@@ -50,4 +52,11 @@ export async function render(container) {
   }
 
   container.innerHTML = `<ul class="mover-list">${data.movers.map(moverRow).join("")}</ul>`;
+  container.querySelectorAll(".detail-btn").forEach((btn) =>
+    btn.addEventListener("click", () =>
+      window.dispatchEvent(new CustomEvent("open-bill-detail", {
+        detail: { key: btn.dataset.key, identifier: btn.dataset.id },
+      }))
+    )
+  );
 }

@@ -28,6 +28,7 @@ def get_movers() -> dict:
         old, new = ch.get("old") or {}, ch.get("new") or {}
         movers.append(
             {
+                "key": ch["key"],
                 "identifier": new.get("identifier") or old.get("identifier") or ch["key"],
                 "title": new.get("title") or old.get("title") or "",
                 "from_stage": old.get("stage") or "?",

@@ -39,6 +39,8 @@ function billRow(b) {
     `<span class="bill-id">${esc(b.identifier)}</span>` +
     `<span class="stage-badge ${stageClass(b.stage)}">${esc(b.stage)}</span>` +
     (b.chamber ? `<span class="bill-chamber">${esc(b.chamber)}</span>` : "") +
+    `<button class="detail-btn" data-key="${esc(b.key)}" data-id="${esc(b.identifier)}" ` +
+    `type="button" aria-label="Show details for ${esc(b.identifier)}">Details</button>` +
     `</div>` +
     `<div class="bill-title">${title}</div>` +
     `<div class="bill-action">` +
@@ -99,6 +101,13 @@ async function toggleWatch(btn) {
 function wireEvents() {
   root.querySelectorAll(".watch-btn").forEach((btn) =>
     btn.addEventListener("click", () => toggleWatch(btn))
+  );
+  root.querySelectorAll(".detail-btn").forEach((btn) =>
+    btn.addEventListener("click", () =>
+      window.dispatchEvent(new CustomEvent("open-bill-detail", {
+        detail: { key: btn.dataset.key, identifier: btn.dataset.id },
+      }))
+    )
   );
   // Keep stars in sync when the Watchlist panel changes (wire once).
   if (!wired) {

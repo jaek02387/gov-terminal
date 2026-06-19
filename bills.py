@@ -76,6 +76,15 @@ def identifier(bill_type: str, number: str) -> str:
     return f"{(bill_type or '').upper()} {number}"
 
 
+def _ordinal(n) -> str:
+    n = int(n)
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
 def website_url(congress, bill_type: str, number: str) -> str:
     slug = _TYPE_SLUG.get((bill_type or "").lower(), "house-bill")
-    return f"https://www.congress.gov/bill/{congress}th-congress/{slug}/{number}"
+    return f"https://www.congress.gov/bill/{_ordinal(congress)}-congress/{slug}/{number}"

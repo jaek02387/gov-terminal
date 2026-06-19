@@ -85,6 +85,119 @@ def parse_identifier(text: str, default_congress=None) -> tuple | None:
     return (congress, btype, number)
 
 
+def _strip_html(s: str) -> str:
+    return re.sub(r"<[^>]+>", "", s or "").strip()
+
+
+def fetch_detail(congress, btype: str, number: str) -> dict | None:
+    """Lazily fetch a single bill's FULL detail (sponsors, cosponsors, the action
+    /committee timeline, recorded votes, text-version links, CRS summary).
+
+    The main bill object is essential (None => 404, network error => raises). The
+    sub-sections are best-effort and fetched in parallel, so a partial API outage
+    still returns whatever succeeded. Only ever called on click -- never during
+    the hourly refresh.
+    """
+    import requests
+
+    if not config.CONGRESS_API_KEY:
+        return None
+    base = f"{API_BASE}/{congress}/{btype.lower()}/{number}"
+
+    def get(path: str):
+        r = requests.get(
+            base + path,
+            params={"api_key": config.CONGRESS_API_KEY, "format": "json", "limit": 250},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if path == "" and r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.json()
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        f_bill = pool.submit(get, "")
+        f_actions = pool.submit(get, "/actions")
+        f_cos = pool.submit(get, "/cosponsors")
+        f_text = pool.submit(get, "/text")
+        f_sum = pool.submit(get, "/summaries")
+
+        bill_json = f_bill.result()  # essential; raises on network error
+        if bill_json is None:
+            return None  # 404
+
+        def safe(fut):
+            try:
+                return fut.result()
+            except Exception as exc:
+                log.warning("detail sub-section failed for %s: %s", base, exc)
+                return None
+
+        return _assemble_detail(
+            congress, btype, number,
+            bill_json.get("bill") or {},
+            safe(f_actions), safe(f_cos), safe(f_text), safe(f_sum),
+        )
+
+
+def _assemble_detail(congress, btype, number, bill, actions_j, cos_j, text_j, sum_j) -> dict:
+    sponsors = [
+        {"name": s.get("fullName") or "", "party": s.get("party") or "", "state": s.get("state") or ""}
+        for s in (bill.get("sponsors") or [])
+    ]
+
+    actions, votes = [], []
+    for a in (actions_j or {}).get("actions", []) if actions_j else []:
+        actions.append({"date": a.get("actionDate") or "", "text": a.get("text") or ""})
+        for rv in a.get("recordedVotes") or []:
+            votes.append({
+                "chamber": rv.get("chamber") or "",
+                "roll": rv.get("rollNumber") or "",
+                "date": (rv.get("date") or a.get("actionDate") or "")[:10],
+                "url": rv.get("url") or "",
+                "action": a.get("text") or "",
+            })
+
+    cosponsors = [
+        {"name": c.get("fullName") or "", "party": c.get("party") or "", "state": c.get("state") or ""}
+        for c in (cos_j or {}).get("cosponsors", []) if cos_j
+    ]
+    cos_count = ((cos_j or {}).get("pagination") or {}).get("count") if cos_j else None
+
+    text_versions = [
+        {
+            "type": t.get("type") or "Text",
+            "date": t.get("date") or "",
+            "formats": [{"type": f.get("type") or "", "url": f.get("url") or ""} for f in (t.get("formats") or [])],
+        }
+        for t in (text_j or {}).get("textVersions", []) if text_j
+    ]
+
+    summary = ""
+    summaries = (sum_j or {}).get("summaries", []) if sum_j else []
+    if summaries:
+        summary = _strip_html(summaries[-1].get("text") or "")
+
+    la = bill.get("latestAction") or {}
+    return {
+        "identifier": bills.identifier(btype, number),
+        "title": bill.get("title") or "(untitled)",
+        "congress": congress, "type": btype.upper(), "number": str(number),
+        "url": bills.website_url(congress, btype, number),
+        "introduced_date": bill.get("introducedDate") or "",
+        "policy_area": (bill.get("policyArea") or {}).get("name") or "",
+        "origin_chamber": bill.get("originChamber") or "",
+        "sponsors": sponsors,
+        "cosponsor_count": cos_count if cos_count is not None else len(cosponsors),
+        "cosponsors": cosponsors[:25],
+        "latest_action": {"date": la.get("actionDate") or "", "text": la.get("text") or ""},
+        "actions": actions,
+        "votes": votes,
+        "text_versions": text_versions,
+        "summary": summary,
+    }
+
+
 def fetch_bill(congress, btype: str, number: str) -> dict | None:
     """Fetch a single bill by congress/type/number. Returns a canonical record
     (``{"key","data"}``), or None only for a genuine 404 (bill doesn't exist).

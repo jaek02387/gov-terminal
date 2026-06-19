@@ -34,6 +34,8 @@ function billRow(b) {
     `<span class="bill-id">${esc(b.identifier)}</span>` +
     `<span class="stage-badge ${stageClass(b.stage)}">${esc(b.stage)}</span>` +
     changed +
+    `<button class="detail-btn" data-key="${esc(b.key)}" data-id="${esc(b.identifier)}" ` +
+    `type="button" aria-label="Show details for ${esc(b.identifier)}">Details</button>` +
     `</div>` +
     `<div class="bill-title">${title}</div>` +
     (b.latest_action_date
@@ -114,6 +116,13 @@ function wireEvents() {
   }
   root.querySelectorAll(".watch-btn").forEach((btn) =>
     btn.addEventListener("click", () => removeKey(btn.dataset.key))
+  );
+  root.querySelectorAll(".detail-btn").forEach((btn) =>
+    btn.addEventListener("click", () =>
+      window.dispatchEvent(new CustomEvent("open-bill-detail", {
+        detail: { key: btn.dataset.key, identifier: btn.dataset.id },
+      }))
+    )
   );
   // Re-render when the feed stars something (wire once).
   if (!wired) {

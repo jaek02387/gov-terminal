@@ -396,6 +396,62 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
   white-space: nowrap;
 }
 
+/* Details button on bill rows */
+.detail-btn {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--fg-dim);
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+}
+.detail-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---- Bill detail overlay ---- */
+.detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.detail-overlay[hidden] { display: none; }
+.detail-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.6rem 1rem;
+  background: #0d141d;
+  border-bottom: 1px solid var(--panel-border);
+}
+.detail-bar h2 { font-size: 1rem; margin: 0; color: var(--accent); }
+.detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.detail-overview { margin-bottom: 1rem; }
+.detail-billtitle { font-size: 1.1rem; font-weight: bold; margin-bottom: 0.3rem; }
+.detail-section { margin: 1.1rem 0; }
+.detail-section h3 {
+  font-size: 0.9rem;
+  color: var(--accent);
+  border-bottom: 1px dashed var(--panel-border);
+  padding-bottom: 0.25rem;
+  margin: 0 0 0.5rem;
+}
+.detail-summary { line-height: 1.5; }
+.member-list, .text-list, .vote-list, .action-list { list-style: none; margin: 0; padding: 0; }
+.member-list li, .text-list li, .vote-list li { padding: 0.2rem 0; }
+.action-list li { padding: 0.25rem 0; border-bottom: 1px solid #1d2731; font-size: 0.88rem; }
+.detail-section a { color: var(--accent); }
+
 /* Stage badge: text label is always present (never colour-only). */
 .stage-badge {
   font-size: 0.7rem;

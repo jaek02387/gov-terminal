@@ -129,8 +129,118 @@ async function closeExpanded() {
 }
 
 document.getElementById("expanded-back").addEventListener("click", closeExpanded);
+
+// --- bill detail overlay (lazy, opened from any bill row) ------------------
+const billDetail = document.getElementById("bill-detail");
+const detailBody = document.getElementById("detail-body");
+const detailTitle = document.getElementById("detail-title");
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
+async function openBillDetail(key, identifier) {
+  detailTitle.textContent = identifier || "Bill detail";
+  detailBody.innerHTML = `<p class="muted">Loading bill detail…</p>`;
+  billDetail.hidden = false;
+  document.getElementById("detail-back").focus();
+  try {
+    const res = await fetch(`/api/bills/detail/${encodeURIComponent(key)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      detailBody.innerHTML = `<div class="error-box">${esc(data.detail || "Could not load bill detail.")}</div>`;
+      return;
+    }
+    renderBillDetail(data.detail, data.stale);
+  } catch (e) {
+    detailBody.innerHTML = `<div class="error-box">Network error loading bill detail.</div>`;
+  }
+}
+
+function closeBillDetail() {
+  billDetail.hidden = true;
+  detailBody.innerHTML = "";
+}
+
+function section(title, inner) {
+  return `<section class="detail-section"><h3>${esc(title)}</h3>${inner}</section>`;
+}
+
+function renderBillDetail(d, stale) {
+  const member = (m) =>
+    `${esc(m.name)}${m.party || m.state ? ` <span class="muted">(${esc(m.party)}-${esc(m.state)})</span>` : ""}`;
+
+  let html = "";
+  if (stale) html += `<p class="muted">Showing a cached copy (Congress.gov is unreachable right now).</p>`;
+
+  // Overview
+  const meta = [
+    d.policy_area && `Policy area: ${esc(d.policy_area)}`,
+    d.origin_chamber && `Origin: ${esc(d.origin_chamber)}`,
+    d.introduced_date && `Introduced: ${esc(d.introduced_date)}`,
+  ].filter(Boolean).join(" · ");
+  html += `<div class="detail-overview"><div class="detail-billtitle">${esc(d.title)}</div>` +
+    (meta ? `<div class="muted">${meta}</div>` : "") +
+    (d.url ? `<div><a href="${esc(d.url)}" target="_blank" rel="noopener">View on congress.gov ↗</a></div>` : "") +
+    `</div>`;
+
+  if (d.latest_action && d.latest_action.text)
+    html += section("Latest action",
+      `<p>${d.latest_action.date ? `<span class="bill-date">${esc(d.latest_action.date)}</span> — ` : ""}${esc(d.latest_action.text)}</p>`);
+
+  if (d.summary)
+    html += section("Summary", `<p class="detail-summary">${esc(d.summary)}</p>`);
+
+  if (d.sponsors && d.sponsors.length)
+    html += section("Sponsor" + (d.sponsors.length > 1 ? "s" : ""),
+      `<ul class="member-list">${d.sponsors.map((m) => `<li>${member(m)}</li>`).join("")}</ul>`);
+
+  if (d.cosponsor_count)
+    html += section(`Cosponsors (${d.cosponsor_count})`,
+      d.cosponsors && d.cosponsors.length
+        ? `<ul class="member-list">${d.cosponsors.map((m) => `<li>${member(m)}</li>`).join("")}</ul>` +
+          (d.cosponsor_count > d.cosponsors.length ? `<p class="muted">…and ${d.cosponsor_count - d.cosponsors.length} more</p>` : "")
+        : `<p class="muted">${d.cosponsor_count} cosponsor(s).</p>`);
+
+  // Full text (links to official versions)
+  if (d.text_versions && d.text_versions.length) {
+    const tv = d.text_versions.map((t) =>
+      `<li>${esc(t.type)}${t.date ? ` <span class="muted">(${esc(t.date)})</span>` : ""}: ` +
+      t.formats.map((f) => `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.type)} ↗</a>`).join(" · ") +
+      `</li>`).join("");
+    html += section("Full text", `<ul class="text-list">${tv}</ul>`);
+  } else {
+    html += section("Full text", `<p class="muted">No text versions published yet.</p>`);
+  }
+
+  // Recorded votes
+  if (d.votes && d.votes.length)
+    html += section("Recorded votes",
+      `<ul class="vote-list">${d.votes.map((v) =>
+        `<li>${esc(v.chamber)} roll ${esc(v.roll)} <span class="muted">${esc(v.date)}</span>` +
+        (v.url ? ` — <a href="${esc(v.url)}" target="_blank" rel="noopener">tally ↗</a>` : "") +
+        (v.action ? `<div class="muted">${esc(v.action)}</div>` : "") + `</li>`).join("")}</ul>`);
+
+  // Action / committee history
+  if (d.actions && d.actions.length)
+    html += section(`Action & committee history (${d.actions.length})`,
+      `<ul class="action-list">${d.actions.map((a) =>
+        `<li><span class="bill-date">${esc(a.date)}</span> — ${esc(a.text)}</li>`).join("")}</ul>`);
+
+  detailBody.innerHTML = html;
+}
+
+document.getElementById("detail-back").addEventListener("click", closeBillDetail);
+window.addEventListener("open-bill-detail", (e) =>
+  openBillDetail(e.detail.key, e.detail.identifier)
+);
+
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && expandedId) closeExpanded();
+  if (e.key !== "Escape") return;
+  if (!billDetail.hidden) closeBillDetail();   // topmost overlay closes first
+  else if (expandedId) closeExpanded();
 });
 
 // --- refresh + text size --------------------------------------------------

@@ -37,6 +37,16 @@
     </section>
   </main>
 
+  <!-- Lazy bill detail overlay (opened on click from any bill row) -->
+  <div id="bill-detail" class="detail-overlay" hidden role="dialog" aria-modal="true"
+       aria-label="Bill detail">
+    <div class="detail-bar">
+      <button id="detail-back" type="button">&larr; Back</button>
+      <h2 id="detail-title"></h2>
+    </div>
+    <div id="detail-body" class="detail-body"></div>
+  </div>
+
   <script type="module" src="/static/js/app.js"></script>
 </body>
 </html>
