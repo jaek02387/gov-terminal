@@ -6,11 +6,14 @@ do a single lazy quote fetch so the new stock appears immediately.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import catalog
 import db
+import news as newsapi
 from sources import stocks
 
 PANEL = {"id": "stocks", "title": "Stocks by Federal Priority", "order": 1}
@@ -99,6 +102,77 @@ def add_stock(req: AddRequest) -> dict:
         "category": category,
         "name": db.get_names().get(ticker, ""),
         "quote": quote,
+    }
+
+
+def _strip(item: dict) -> dict:
+    return {k: v for k, v in item.items() if not k.startswith("_")}
+
+
+def _cached(bucket: str, key: str, ttl: int, fetch_fn):
+    """Lazy TTL cache over a SQLite bucket: serve fresh cache, else fetch+store."""
+    item = db.read_item(bucket, key)
+    if item:
+        try:
+            age = (
+                datetime.now(timezone.utc) - datetime.fromisoformat(item["_fetched_at"])
+            ).total_seconds()
+        except Exception:
+            age = None
+        if age is not None and age < ttl:
+            return _strip(item)
+    data = fetch_fn()
+    db.store_snapshot(bucket, [{"key": key, "data": data}])
+    return data
+
+
+def _hist_ttl(range_key: str) -> int:
+    return 600 if range_key in ("1D", "1W") else 6 * 3600  # intraday short, else 6h
+
+
+@router.get("/history/{ticker}")
+def stock_history(ticker: str, range: str = "1M") -> dict:
+    ticker = ticker.strip().upper()
+    if not stocks.is_valid_ticker(ticker):
+        raise HTTPException(status_code=400, detail="Invalid ticker.")
+    rng = range if range in stocks.HISTORY_RANGES else "1M"
+    data = _cached("stock_hist", f"{ticker}:{rng}", _hist_ttl(rng),
+                   lambda: {"points": stocks.get_history(ticker, rng)})
+    return {"ticker": ticker, "range": rng, "points": data.get("points", [])}
+
+
+@router.get("/news/{ticker}")
+def stock_news(ticker: str) -> dict:
+    ticker = ticker.strip().upper()
+    if not stocks.is_valid_ticker(ticker):
+        raise HTTPException(status_code=400, detail="Invalid ticker.")
+    data = _cached("stock_news", ticker, 1800, lambda: newsapi.get_news(ticker))
+    return {"ticker": ticker, **data}
+
+
+@router.get("/detail/{ticker}")
+def stock_detail(ticker: str, range: str = "1M") -> dict:
+    """Lazy stock detail: current quote (from cache) + stats + chart history +
+    news. Each piece is cached; the chart range can be switched via /history."""
+    ticker = ticker.strip().upper()
+    if not stocks.is_valid_ticker(ticker):
+        raise HTTPException(status_code=400, detail="Invalid ticker.")
+    rng = range if range in stocks.HISTORY_RANGES else "1M"
+
+    quote = db.read_item("stocks", ticker)
+    stats = _cached("stock_stats", ticker, 3600, lambda: stocks.get_stats(ticker))
+    hist = _cached("stock_hist", f"{ticker}:{rng}", _hist_ttl(rng),
+                   lambda: {"points": stocks.get_history(ticker, rng)})
+    news_data = _cached("stock_news", ticker, 1800, lambda: newsapi.get_news(ticker))
+    return {
+        "ticker": ticker,
+        "name": (stats or {}).get("name") or db.get_names().get(ticker, ""),
+        "quote": _strip(quote) if quote else None,
+        "stats": stats or {},
+        "history": hist.get("points", []),
+        "range": rng,
+        "ranges": list(stocks.HISTORY_RANGES.keys()),
+        "news": news_data,
     }
 
 

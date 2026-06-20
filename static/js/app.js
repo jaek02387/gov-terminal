@@ -237,6 +237,21 @@ window.addEventListener("open-bill-detail", (e) =>
   openBillDetail(e.detail.key, e.detail.identifier)
 );
 
+// Stock detail reuses the same overlay; its chart/news renderer is lazy-loaded.
+let stockDetailMod = null;
+window.addEventListener("open-stock-detail", async (e) => {
+  detailTitle.textContent = e.detail.name || e.detail.ticker || "Stock";
+  detailBody.innerHTML = `<p class="muted">Loading…</p>`;
+  billDetail.hidden = false;
+  document.getElementById("detail-back").focus();
+  try {
+    stockDetailMod = stockDetailMod || (await import("/static/js/stock-detail.js"));
+    await stockDetailMod.open(detailBody, e.detail.ticker, e.detail.name);
+  } catch (err) {
+    detailBody.innerHTML = `<div class="error-box">Failed to load stock detail.</div>`;
+  }
+});
+
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!billDetail.hidden) closeBillDetail();   // topmost overlay closes first

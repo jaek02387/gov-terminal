@@ -38,7 +38,9 @@ function tickerCell(q) {
   const nameLine = q.name
     ? `<span class="company">${esc(q.name)}</span>`
     : "";
-  return `<td class="ticker"><span class="sym">${esc(q.ticker)}</span>${nameLine}</td>`;
+  return `<td class="ticker"><button class="stock-link sym" type="button" ` +
+    `data-ticker="${esc(q.ticker)}" data-name="${esc(q.name || "")}" ` +
+    `aria-label="Show chart and news for ${esc(q.ticker)}">${esc(q.ticker)}</button>${nameLine}</td>`;
 }
 
 function row(q) {
@@ -284,6 +286,13 @@ function wireEvents() {
   }
   root.querySelectorAll(".remove-btn").forEach((btn) => {
     btn.addEventListener("click", () => removeTicker(btn.dataset.ticker));
+  });
+  root.querySelectorAll(".stock-link").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      window.dispatchEvent(new CustomEvent("open-stock-detail", {
+        detail: { ticker: btn.dataset.ticker, name: btn.dataset.name },
+      }))
+    );
   });
 
   // Close the dropdown when clicking outside the combobox (wire once).

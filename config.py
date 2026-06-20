@@ -28,6 +28,14 @@ load_dotenv(BASE_DIR / ".env")
 CONGRESS_API_KEY = os.getenv("CONGRESS_API_KEY", "").strip()
 LEGISCAN_API_KEY = os.getenv("LEGISCAN_API_KEY", "").strip()
 
+# Optional stock-news providers (leave blank to keep dormant). The news chain
+# falls back to free yfinance news when neither key is set.
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "").strip()
+MARKETAUX_API_KEY = os.getenv("MARKETAUX_API_KEY", "").strip()
+# Optional: restrict Marketaux to specific source domains for maximum neutrality,
+# e.g. "apnews.com,reuters.com". Blank = all sources.
+MARKETAUX_DOMAINS = os.getenv("MARKETAUX_DOMAINS", "").strip()
+
 # ---------------------------------------------------------------------------
 # Refresh cadence
 # ---------------------------------------------------------------------------

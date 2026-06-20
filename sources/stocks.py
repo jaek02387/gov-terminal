@@ -81,6 +81,65 @@ def _parse_quote(frame, ticker: str) -> dict | None:
         return None
 
 
+# Chart ranges -> (yfinance period, interval). Lazy, on click only.
+HISTORY_RANGES = {
+    "1D": ("1d", "5m"),
+    "1W": ("5d", "30m"),
+    "1M": ("1mo", "1d"),
+    "6M": ("6mo", "1d"),
+    "1Y": ("1y", "1d"),
+    "5Y": ("5y", "1wk"),
+}
+
+
+def get_history(ticker: str, range_key: str = "1M") -> list[dict]:
+    """Historical price points for the chart. Returns ``[{"t", "close"}, ...]``."""
+    import yfinance as yf
+
+    period, interval = HISTORY_RANGES.get(range_key, HISTORY_RANGES["1M"])
+    try:
+        frame = yf.Ticker(ticker).history(period=period, interval=interval)
+    except Exception as exc:
+        log.warning("history failed for %s (%s): %s", ticker, range_key, exc)
+        return []
+    if frame is None or frame.empty or "Close" not in frame.columns:
+        return []
+    out: list[dict] = []
+    for idx, val in frame["Close"].dropna().items():
+        out.append({"t": idx.isoformat(), "close": round(float(val), 2)})
+    return out
+
+
+def get_stats(ticker: str) -> dict:
+    """Key stats (open/high/low/volume/52w/market cap/PE/etc.) for the detail
+    view. One yfinance metadata call -- only used lazily on click, then cached."""
+    import yfinance as yf
+
+    try:
+        info = yf.Ticker(ticker).info or {}
+    except Exception as exc:
+        log.warning("stats failed for %s: %s", ticker, exc)
+        return {}
+    g = info.get
+    return {
+        "name": g("longName") or g("shortName") or "",
+        "exchange": g("fullExchangeName") or g("exchange") or "",
+        "currency": g("currency") or "USD",
+        "open": g("open") or g("regularMarketOpen"),
+        "day_high": g("dayHigh") or g("regularMarketDayHigh"),
+        "day_low": g("dayLow") or g("regularMarketDayLow"),
+        "volume": g("volume") or g("regularMarketVolume"),
+        "avg_volume": g("averageVolume"),
+        "market_cap": g("marketCap"),
+        "pe": g("trailingPE"),
+        "eps": g("trailingEps"),
+        "beta": g("beta"),
+        "dividend_yield": g("dividendYield"),
+        "year_high": g("fiftyTwoWeekHigh"),
+        "year_low": g("fiftyTwoWeekLow"),
+    }
+
+
 def search_symbols(query: str, limit: int = 8) -> list[dict]:
     """Typeahead suggestions via Yahoo Finance's public search endpoint (no key).
 
