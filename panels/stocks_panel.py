@@ -6,6 +6,7 @@ do a single lazy quote fetch so the new stock appears immediately.
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
@@ -160,10 +161,20 @@ def stock_detail(ticker: str, range: str = "1M") -> dict:
     rng = range if range in stocks.HISTORY_RANGES else "1M"
 
     quote = db.read_item("stocks", ticker)
-    stats = _cached("stock_stats", ticker, 3600, lambda: stocks.get_stats(ticker))
-    hist = _cached("stock_hist", f"{ticker}:{rng}", _hist_ttl(rng),
-                   lambda: {"points": stocks.get_history(ticker, rng)})
-    news_data = _cached("stock_news", ticker, 1800, lambda: newsapi.get_news(ticker))
+
+    # Fetch the three independently-cached pieces concurrently so a cold load is
+    # bounded by the slowest fetch, not their sum. SQLite writes still serialise
+    # behind the db lock, so this is safe.
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_stats = pool.submit(_cached, "stock_stats", ticker, 3600,
+                              lambda: stocks.get_stats(ticker))
+        f_hist = pool.submit(_cached, "stock_hist", f"{ticker}:{rng}", _hist_ttl(rng),
+                             lambda: {"points": stocks.get_history(ticker, rng)})
+        f_news = pool.submit(_cached, "stock_news", ticker, 1800,
+                             lambda: newsapi.get_news(ticker))
+        stats = f_stats.result()
+        hist = f_hist.result()
+        news_data = f_news.result()
     return {
         "ticker": ticker,
         "name": (stats or {}).get("name") or db.get_names().get(ticker, ""),
