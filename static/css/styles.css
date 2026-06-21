@@ -431,10 +431,10 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 1rem;
   width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
+  /* Full-width scroll container; centre the content with padding (not margin) so
+     the side gutters are inside the scrollable area -- scrolling works anywhere. */
+  padding: 1rem max(1rem, calc((100% - 900px) / 2));
 }
 .detail-overview { margin-bottom: 1rem; }
 .detail-billtitle { font-size: 1.1rem; font-weight: bold; margin-bottom: 0.3rem; }
