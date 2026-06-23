@@ -121,6 +121,22 @@ main#main {
   border-bottom: 1px solid var(--panel-border);
   flex: 0 0 auto;
 }
+/* Title bar is the drag handle: pointer cursor on hover; closed hand while
+   dragging. Only applies to real dashboard panels (not the expanded view). */
+.panel.quad > .panel-title { cursor: pointer; user-select: none; }
+.panel.quad.dragging { opacity: 0.4; }   /* original fades in place while a solid clone is dragged */
+.panel.quad.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; }
+
+/* Fully-opaque clone that follows the cursor during a drag */
+.drag-ghost {
+  position: fixed;
+  z-index: 100;
+  margin: 0;
+  pointer-events: none;          /* so elementFromPoint sees the panel beneath */
+  opacity: 1;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+body.dragging-panel, body.dragging-panel * { cursor: grabbing !important; }
 .panel-body { padding: 0.5rem 1rem 1rem; }
 
 /* ---- 2x2 dashboard grid ---- */

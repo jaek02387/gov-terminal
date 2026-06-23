@@ -54,15 +54,114 @@ function makePanelCell(p) {
   const sec = document.createElement("section");
   sec.className = "panel quad";
   sec.id = `quad-${p.id}`;
+  sec.dataset.panelId = p.id;
   sec.setAttribute("tabindex", "-1");
+  // The title bar is the drag handle. Dragging from the body or buttons does
+  // nothing, so existing interactions are untouched.
   sec.innerHTML =
-    `<h2 id="panel-${p.id}">${p.title}</h2>` +
+    `<h2 id="panel-${p.id}" class="panel-title">${p.title}</h2>` +
     `<div class="panel-body" id="body-${p.id}">Loading…</div>` +
     `<div class="panel-foot">` +
     `<button class="see-more" type="button" data-id="${p.id}" ` +
     `aria-label="Expand ${p.title}">See more</button></div>`;
   sec.querySelector(".see-more").addEventListener("click", () => openExpanded(p.id));
+  wirePanelDrag(sec, p.id);
   return sec;
+}
+
+// --- drag-to-swap quadrants ----------------------------------------------
+function swapNodes(a, b) {
+  if (a === b) return;
+  const marker = document.createComment("");
+  a.parentNode.insertBefore(marker, a);
+  b.parentNode.insertBefore(a, b);
+  marker.parentNode.insertBefore(b, marker);
+  marker.remove();
+}
+
+function savePanelOrder() {
+  const ids = [...dashboard.querySelectorAll(".panel.quad[data-panel-id]")].map(
+    (el) => el.dataset.panelId
+  );
+  try { localStorage.setItem("panelOrder", JSON.stringify(ids)); } catch (_) {}
+}
+
+function swapPanels(fromId, toId) {
+  if (!fromId || fromId === toId) return;
+  const a = document.getElementById(`quad-${fromId}`);
+  const b = document.getElementById(`quad-${toId}`);
+  if (a && b) {
+    swapNodes(a, b); // a DOM reposition swaps the grid cells; content/state intact
+    savePanelOrder();
+  }
+}
+
+// Custom pointer drag: a fully-opaque clone of the whole panel follows the
+// cursor (native HTML5 drag images are forced semi-transparent by the browser).
+function wirePanelDrag(sec, id) {
+  const handle = sec.querySelector(".panel-title");
+  handle.addEventListener("mousedown", (e) => beginPanelDrag(e, sec, id));
+}
+
+function beginPanelDrag(e, sec, id) {
+  if (e.button !== 0) return; // left button only
+  e.preventDefault();         // no text selection / focus jump
+  const rect = sec.getBoundingClientRect();
+  const offX = e.clientX - rect.left, offY = e.clientY - rect.top;
+  const startX = e.clientX, startY = e.clientY;
+  let ghost = null, target = null, started = false;
+
+  function move(ev) {
+    if (!started) {
+      // small threshold so a plain click on the title bar doesn't "lift" it
+      if (Math.abs(ev.clientX - startX) < 4 && Math.abs(ev.clientY - startY) < 4) return;
+      started = true;
+      ghost = sec.cloneNode(true);
+      ghost.removeAttribute("id"); // avoid duplicate ids while the clone exists
+      ghost.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
+      ghost.classList.add("drag-ghost");
+      ghost.style.width = rect.width + "px";
+      ghost.style.height = rect.height + "px";
+      document.body.appendChild(ghost);
+      sec.classList.add("dragging");            // fade the original in place
+      document.body.classList.add("dragging-panel");
+    }
+    ghost.style.left = ev.clientX - offX + "px";
+    ghost.style.top = ev.clientY - offY + "px";
+    // highlight the panel under the cursor (ghost is pointer-events:none)
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const t = under && under.closest(".panel.quad");
+    if (target && target !== t) target.classList.remove("drag-over");
+    if (t && t !== sec && t.dataset.panelId) { t.classList.add("drag-over"); target = t; }
+    else target = null;
+  }
+
+  function up() {
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", up);
+    if (!started) return;
+    if (ghost) ghost.remove();
+    sec.classList.remove("dragging");
+    document.body.classList.remove("dragging-panel");
+    if (target) {
+      target.classList.remove("drag-over");
+      swapPanels(id, target.dataset.panelId);
+    }
+  }
+
+  document.addEventListener("mousemove", move);
+  document.addEventListener("mouseup", up);
+}
+
+// Honour the user's saved quadrant order; new panels append, removed ones drop.
+function applySavedOrder(panels) {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem("panelOrder") || "[]"); } catch (_) {}
+  const byId = new Map(panels.map((p) => [p.id, p]));
+  const ordered = [];
+  for (const pid of saved) if (byId.has(pid)) { ordered.push(byId.get(pid)); byId.delete(pid); }
+  for (const p of panels) if (byId.has(p.id)) ordered.push(p);
+  return ordered;
 }
 
 function makePlaceholderCell(label) {
@@ -75,7 +174,7 @@ function makePlaceholderCell(label) {
 }
 
 async function loadDashboard(meta) {
-  panelMeta = meta.panels || [];
+  panelMeta = applySavedOrder(meta.panels || []);
   dashboard.innerHTML = "";
 
   // Always lay out at least 4 quadrants; pad to an even count so rows fill.
@@ -90,9 +189,11 @@ async function loadDashboard(meta) {
     }
   }
 
-  for (const p of panelMeta) {
-    await renderPanelInto(p, document.getElementById(`body-${p.id}`));
-  }
+  // Render panels concurrently (each reads its own cached endpoint) so the
+  // dashboard/refresh re-render isn't gated panel-by-panel.
+  await Promise.all(
+    panelMeta.map((p) => renderPanelInto(p, document.getElementById(`body-${p.id}`)))
+  );
 }
 
 // --- expanded (full-screen) view -----------------------------------------
