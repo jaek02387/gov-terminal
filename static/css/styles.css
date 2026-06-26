@@ -517,6 +517,13 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 .price-chart.chart-down .chart-fill { fill: var(--down); }
 .chart-label { fill: var(--fg-dim); font-size: 11px; }
 
+/* Hover crosshair on the price chart */
+.cross-line { stroke: var(--fg-dim); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.cross-dot { fill: var(--accent); stroke: var(--bg); stroke-width: 2; }
+.cross-value { fill: var(--accent); font-size: 13px; font-weight: bold; }
+.cross-date { fill: var(--fg-dim); font-size: 10px; }
+.range-tag { color: var(--fg-dim); font-size: 0.8rem; }
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
