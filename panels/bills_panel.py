@@ -6,7 +6,7 @@ which source produced the data.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -37,15 +37,30 @@ def _active_bills() -> tuple[list[dict], str]:
     return [], ""
 
 
+def _recently_new_keys() -> set[str]:
+    """Bill keys first seen within the NEW window (from the snapshot-diff log)."""
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=config.NEW_BILL_WINDOW_DAYS)
+    ).isoformat()
+    out: set[str] = set()
+    for src in ("congress", "legiscan"):
+        for ch in db.read_changes(src, limit=1000):
+            if ch.get("change_type") == "new" and (ch.get("detected_at") or "") >= cutoff:
+                out.add(ch["key"])
+    return out
+
+
 @router.get("")
 def get_bills() -> dict:
     rows, source = _active_bills()
     # Most-recent action first; missing dates sort last.
     rows.sort(key=lambda b: b.get("latest_action_date") or "", reverse=True)
     watched = db.watched_keys()
+    new_keys = _recently_new_keys()
     for b in rows:
         b["key"] = b.get("_key")
         b["watched"] = b.get("_key") in watched
+        b["is_new"] = b.get("_key") in new_keys
     return {
         "bills": rows[:MAX_ROWS],
         "total": len(rows),

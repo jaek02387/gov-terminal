@@ -124,13 +124,43 @@ CURRENT_CONGRESS = (datetime.date.today().year - 1789) // 2 + 1
 # concurrent resolutions, which are mostly ceremonial/procedural noise.
 SUBSTANTIVE_BILL_TYPES = ["hr", "s", "hjres", "sjres"]
 
-# Title keywords used to keep bills relevant to the federal priorities above.
-# Matched as whole words (so "defense" won't catch "self-defense"). Edit freely.
+# Keywords used to keep bills relevant to the federal priorities above. Matched
+# as whole words against the bill TITLE *and* its latest-action text (so a bill
+# referred to e.g. the Committee on Armed Services is caught even if its title
+# has no keyword). Edit freely -- a wider list = wider net (more recall, a bit
+# less precision).
 BILL_SEARCH_TERMS: list[str] = [
-    "defense", "defense industrial", "missile", "munitions", "shipbuilding",
-    "shipyard", "naval", "submarine", "nuclear", "reactor", "uranium",
-    "enrichment", "critical mineral", "critical minerals", "rare earth",
-    "mining", "battery", "semiconductor", "chip", "artificial intelligence",
-    "data center", "energy", "natural gas", "pipeline", "grid", "drone",
-    "unmanned", "satellite", "space launch", "pharmaceutical", "supply chain",
+    # 1. Defense & nuclear modernization
+    "defense", "defense industrial", "national security", "armed forces",
+    "missile", "hypersonic", "munitions", "warfighter",
+    # 2. Nuclear power / reactor buildout
+    "nuclear", "reactor", "uranium", "enrichment", "small modular reactor",
+    # 3. Critical minerals & domestic supply chains
+    "critical mineral", "critical minerals", "rare earth", "mining", "battery",
+    "supply chain", "domestic manufacturing",
+    # 4. AI infrastructure & data centers
+    "semiconductor", "chip", "artificial intelligence", "machine learning",
+    "data center", "quantum",
+    # 5. Energy dominance
+    "energy", "natural gas", "liquefied natural gas", "pipeline", "grid",
+    "electricity", "petroleum", "drilling",
+    # 6. Domestic pharmaceutical manufacturing
+    "pharmaceutical", "drug manufacturing", "active pharmaceutical ingredient",
+    # 7. Shipbuilding & maritime
+    "shipbuilding", "shipyard", "naval", "submarine", "maritime",
+    # 8. Drones & space
+    "drone", "unmanned", "satellite", "space launch", "launch vehicle",
 ]
+
+# Committee names matched against the latest-action text ONLY (a bill "Referred
+# to the Committee on Armed Services" is kept even if its title has no keyword).
+# Keep these HIGH-SIGNAL: broad committees like "Energy and Commerce" handle
+# health/telecom too and would flood the feed, so they are deliberately excluded.
+BILL_COMMITTEE_TERMS: list[str] = [
+    "armed services",
+    "strategic forces",
+    "seapower",
+]
+
+# A bill is flagged "NEW" in the Bills tab if it was first seen within this many days.
+NEW_BILL_WINDOW_DAYS = 7

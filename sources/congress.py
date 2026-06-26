@@ -221,9 +221,10 @@ def fetch_bill(congress, btype: str, number: str) -> dict | None:
     raw = resp.json().get("bill")
     return normalize_bill(raw) if raw else None
 
-# Whole-word matchers for the priority keywords (so "defense" won't match
-# "self-defense" and ceremonial titles don't slip in).
-_PATTERNS = [re.compile(r"\b" + re.escape(t.lower()) + r"\b") for t in config.BILL_SEARCH_TERMS]
+# Whole-word matchers (so "defense" won't match "self-defense"). Title keywords
+# match the bill TITLE; committee keywords match the latest-action text only.
+_TITLE_PATTERNS = [re.compile(r"\b" + re.escape(t.lower()) + r"\b") for t in config.BILL_SEARCH_TERMS]
+_COMMITTEE_PATTERNS = [re.compile(r"\b" + re.escape(t.lower()) + r"\b") for t in config.BILL_COMMITTEE_TERMS]
 _SUBSTANTIVE = set(config.SUBSTANTIVE_BILL_TYPES)
 
 
@@ -251,8 +252,15 @@ class CongressSource(Source):
             for raw in page_bills:
                 if (raw.get("type") or "").lower() not in _SUBSTANTIVE:
                     continue  # skip ceremonial / procedural resolutions
+                # Keep if the TITLE matches a domain keyword OR the latest-action
+                # text matches a high-signal committee (catches committee-referred
+                # bills whose title has no keyword, without the broad-committee noise).
                 title = (raw.get("title") or "").lower()
-                if not any(p.search(title) for p in _PATTERNS):
+                action = ((raw.get("latestAction") or {}).get("text") or "").lower()
+                if not (
+                    any(p.search(title) for p in _TITLE_PATTERNS)
+                    or any(p.search(action) for p in _COMMITTEE_PATTERNS)
+                ):
                     continue
                 rec = normalize_bill(raw)
                 if rec is not None:

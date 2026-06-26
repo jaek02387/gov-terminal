@@ -412,6 +412,18 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
   white-space: nowrap;
 }
 
+/* Newly-added (recently first-seen) priority bill */
+.new-badge {
+  font-size: 0.66rem;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  color: #000;
+  background: var(--up);
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+}
+.bill-new { border-left: 3px solid var(--up); padding-left: 0.5rem; }
+
 /* Details button on bill rows */
 .detail-btn {
   background: transparent;

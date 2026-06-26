@@ -2,6 +2,10 @@
 // auto-discovered panels. Each quadrant scrolls independently and has a
 // "See more" button that opens the panel full-screen (in-app, no reload).
 
+// Version for cache-busting dynamically-imported modules (bump on JS changes;
+// keep in sync with the ?v= on index.html so a normal reload picks up new code).
+const ASSET_V = "7";
+
 const indicator = document.getElementById("refresh-indicator");
 const dashboard = document.getElementById("dashboard");
 const expanded = document.getElementById("expanded");
@@ -41,7 +45,7 @@ async function loadMeta() {
 async function renderPanelInto(p, container) {
   container.innerHTML = "Loading…";
   try {
-    const mod = panelMods[p.id] || (await import(`/static/js/panels/${p.id}.js`));
+    const mod = panelMods[p.id] || (await import(`/static/js/panels/${p.id}.js?v=${ASSET_V}`));
     panelMods[p.id] = mod;
     await mod.render(container);
   } catch (e) {
@@ -346,7 +350,7 @@ window.addEventListener("open-stock-detail", async (e) => {
   billDetail.hidden = false;
   document.getElementById("detail-back").focus();
   try {
-    stockDetailMod = stockDetailMod || (await import("/static/js/stock-detail.js"));
+    stockDetailMod = stockDetailMod || (await import(`/static/js/stock-detail.js?v=${ASSET_V}`));
     await stockDetailMod.open(detailBody, e.detail.ticker, e.detail.name);
   } catch (err) {
     detailBody.innerHTML = `<div class="error-box">Failed to load stock detail.</div>`;

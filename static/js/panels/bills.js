@@ -31,12 +31,13 @@ function billRow(b) {
   const star = b.watched ? "★" : "☆";
   const watchLabel = b.watched ? `Unwatch ${esc(b.identifier)}` : `Watch ${esc(b.identifier)}`;
   return (
-    `<li class="bill">` +
+    `<li class="bill${b.is_new ? " bill-new" : ""}">` +
     `<div class="bill-head">` +
     `<button class="watch-btn${b.watched ? " watching" : ""}" data-key="${esc(b.key)}" ` +
     `data-watched="${b.watched ? 1 : 0}" type="button" aria-label="${watchLabel}" ` +
     `title="${watchLabel}">${star}</button>` +
     `<span class="bill-id">${esc(b.identifier)}</span>` +
+    (b.is_new ? `<span class="new-badge" title="Added recently">NEW</span>` : "") +
     `<span class="stage-badge ${stageClass(b.stage)}">${esc(b.stage)}</span>` +
     (b.chamber ? `<span class="bill-chamber">${esc(b.chamber)}</span>` : "") +
     `<button class="detail-btn" data-key="${esc(b.key)}" data-id="${esc(b.identifier)}" ` +
