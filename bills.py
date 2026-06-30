@@ -7,6 +7,28 @@ bill panels, so they never drift apart.
 """
 from __future__ import annotations
 
+import re
+
+import config
+
+# Whole-word matchers per priority (built once), for classifying a bill into one
+# of the 8 federal priorities -> drives the timeline label + related stocks.
+_CATEGORY_PATTERNS = {
+    cat: [re.compile(r"\b" + re.escape(k.lower()) + r"\b") for k in kws]
+    for cat, kws in config.BILL_PRIORITY_KEYWORDS.items()
+}
+
+
+def classify_category(title: str, policy_area: str = "") -> str:
+    """Return the first federal-priority category whose keywords match the bill's
+    title (or CRS policy area), or "" if none. Category order = priority order."""
+    hay = f"{title or ''} {policy_area or ''}".lower()
+    for cat, pats in _CATEGORY_PATTERNS.items():
+        if any(p.search(hay) for p in pats):
+            return cat
+    return ""
+
+
 # Rough linear progression of a bill. Index = how far along it is.
 STAGES = [
     "Introduced",

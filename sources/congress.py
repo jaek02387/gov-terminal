@@ -1,8 +1,9 @@
 """Congress.gov bill feed (PRIMARY bill source).
 
-Pulls the most-recently-updated bills and keeps those whose title matches the
-federal-priority search terms in config.py. Each bill's coarse STAGE is tracked
-so the snapshot diff can surface status changes in the "movers" panel.
+Pulls the most-recently-updated bills, classifies each into one of the 8 federal
+priorities (by title; falls back to high-signal committee referral), and keeps
+the matches. Newly-seen bills are tracked via the snapshot diff to power the
+"NEW" badge in the Bills tab.
 
 Dormant (skipped) when CONGRESS_API_KEY is not set -- the app still runs fine and
 the bill panels show a "key needed" hint.
@@ -25,10 +26,11 @@ MAX_PAGES = 4            # pages of recent current-congress bills to scan
 REQUEST_TIMEOUT = 15     # seconds; fail fast instead of stalling the whole refresh
 
 
-def normalize_bill(raw: dict) -> dict | None:
+def normalize_bill(raw: dict, category: str | None = None) -> dict | None:
     """Map a Congress.gov bill object (list item or single-bill response) to our
     canonical ``{"key", "data"}`` record. Returns None if essential fields are
-    missing."""
+    missing. ``category`` overrides the priority classification (e.g. for bills
+    matched via committee rather than title)."""
     try:
         congress = raw.get("congress")
         btype = (raw.get("type") or "").lower()
@@ -38,10 +40,13 @@ def normalize_bill(raw: dict) -> dict | None:
 
         action = raw.get("latestAction") or {}
         action_text = action.get("text") or ""
+        title = raw.get("title") or "(untitled)"
+        policy_area = (raw.get("policyArea") or {}).get("name") or ""
+        cat = category or bills.classify_category(title, policy_area)
         return {
             "key": f"{congress}-{btype}-{number}",
             "data": {
-                "title": raw.get("title") or "(untitled)",
+                "title": title,
                 "congress": congress,
                 "type": btype.upper(),
                 "number": number,
@@ -51,6 +56,8 @@ def normalize_bill(raw: dict) -> dict | None:
                 "latest_action_date": action.get("actionDate") or "",
                 "chamber": raw.get("originChamber") or "",
                 "update_date": raw.get("updateDate") or "",
+                "policy_area": policy_area,       # official CRS area (detail only)
+                "category": cat,                  # our federal-priority bucket
                 "url": bills.website_url(congress, btype, number),
                 "source": "Congress.gov",
             },
@@ -221,9 +228,8 @@ def fetch_bill(congress, btype: str, number: str) -> dict | None:
     raw = resp.json().get("bill")
     return normalize_bill(raw) if raw else None
 
-# Whole-word matchers (so "defense" won't match "self-defense"). Title keywords
-# match the bill TITLE; committee keywords match the latest-action text only.
-_TITLE_PATTERNS = [re.compile(r"\b" + re.escape(t.lower()) + r"\b") for t in config.BILL_SEARCH_TERMS]
+# Committee keywords match the latest-action text only. Title classification is
+# handled by bills.classify_category (priority-grouped keywords).
 _COMMITTEE_PATTERNS = [re.compile(r"\b" + re.escape(t.lower()) + r"\b") for t in config.BILL_COMMITTEE_TERMS]
 _SUBSTANTIVE = set(config.SUBSTANTIVE_BILL_TYPES)
 
@@ -252,17 +258,17 @@ class CongressSource(Source):
             for raw in page_bills:
                 if (raw.get("type") or "").lower() not in _SUBSTANTIVE:
                     continue  # skip ceremonial / procedural resolutions
-                # Keep if the TITLE matches a domain keyword OR the latest-action
-                # text matches a high-signal committee (catches committee-referred
-                # bills whose title has no keyword, without the broad-committee noise).
-                title = (raw.get("title") or "").lower()
-                action = ((raw.get("latestAction") or {}).get("text") or "").lower()
-                if not (
-                    any(p.search(title) for p in _TITLE_PATTERNS)
-                    or any(p.search(action) for p in _COMMITTEE_PATTERNS)
-                ):
-                    continue
-                rec = normalize_bill(raw)
+                # Classify by TITLE into a priority; else keep if the latest
+                # action matches a high-signal committee (-> Defense priority).
+                title = raw.get("title") or ""
+                category = bills.classify_category(title)
+                if not category:
+                    action = ((raw.get("latestAction") or {}).get("text") or "").lower()
+                    if any(p.search(action) for p in _COMMITTEE_PATTERNS):
+                        category = config.BILL_COMMITTEE_CATEGORY
+                    else:
+                        continue
+                rec = normalize_bill(raw, category=category)
                 if rec is not None:
                     kept[rec["key"]] = rec
 

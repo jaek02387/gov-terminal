@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException
 
+import bills
 import config
 import db
 from sources import congress
@@ -71,15 +72,32 @@ def get_bills() -> dict:
     }
 
 
+def _related_stocks(detail: dict) -> tuple[str, list[dict]]:
+    """Stocks for the federal priority this bill belongs to (computed fresh from
+    the live stocks snapshot, not cached with the bill detail)."""
+    cat = bills.classify_category(detail.get("title", ""), detail.get("policy_area", ""))
+    if not cat:
+        return "", []
+    quotes = {q["ticker"]: q for q in db.read_snapshot("stocks")}
+    rows = [quotes.get(t) or {"ticker": t, "status": "missing"}
+            for t in config.STOCK_CATEGORIES.get(cat, [])]
+    return cat, rows
+
+
 @router.get("/detail/{key}")
 def bill_detail(key: str) -> dict:
-    """Lazily fetch (and cache) a single bill's full detail. Called on click only."""
+    """Lazily fetch (and cache) a single bill's full detail. Called on click only.
+    Adds the stocks for the bill's federal priority (computed fresh each call)."""
     parts = key.split("-")
     if len(parts) != 3:
         raise HTTPException(status_code=400, detail="Malformed bill key.")
     cong, btype, number = parts[0], parts[1].lower(), parts[2]
     if not (cong.isdigit() and number.isdigit() and btype.isalpha()):
         raise HTTPException(status_code=400, detail="Malformed bill key.")
+
+    def _resp(detail: dict, **flags) -> dict:
+        cat, rows = _related_stocks(detail)
+        return {"detail": detail, "related_category": cat, "related_stocks": rows, **flags}
 
     cached = db.read_item("detail", key)
     if cached:
@@ -91,13 +109,13 @@ def bill_detail(key: str) -> dict:
         except Exception:
             age = None
         if age is not None and age < DETAIL_TTL_SECONDS:
-            return {"detail": _strip_meta(cached), "cached": True}
+            return _resp(_strip_meta(cached), cached=True)
 
     try:
         detail = congress.fetch_detail(cong, btype, number)
     except Exception:
         if cached:  # API down but we have an older copy -> serve it
-            return {"detail": _strip_meta(cached), "cached": True, "stale": True}
+            return _resp(_strip_meta(cached), cached=True, stale=True)
         raise HTTPException(
             status_code=503, detail="Couldn't reach Congress.gov right now — please try again."
         )
@@ -105,4 +123,4 @@ def bill_detail(key: str) -> dict:
         raise HTTPException(status_code=404, detail=f"No bill found for '{key}'.")
 
     db.store_snapshot("detail", [{"key": key, "data": detail}])
-    return {"detail": detail, "cached": False}
+    return _resp(detail, cached=False)

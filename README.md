@@ -85,10 +85,12 @@ appear. After that, the cache refreshes automatically every
   with a labelled stage badge (Introduced → In Committee → … → Became Law). Data
   from Congress.gov (primary); LegiScan is a dormant fallback. Requires
   `CONGRESS_API_KEY` — without it the panel shows a "key needed" hint.
-- **Bill Movers — Status Changes** — bills whose stage changed between snapshots,
-  computed by diffing each hourly pull against the previous one in SQLite. Shows
-  the `old → new` transition and when it was detected. Brand-new bills are not
-  movers; only real stage transitions appear.
+- **Policy Timeline** — a vertical, chronological timeline (newest at top) mixing
+  the priority **bills** with related government **contracts** from USASpending.gov
+  (an open API — **no key needed**). Each item expands on hover and opens an in-app
+  detail on click: bills show their full detail **plus the stocks for that bill's
+  federal priority**; contracts show the award description. Contracts are matched
+  with the same priority keywords as bills (`CONTRACT_KEYWORDS` in `config.py`).
 - **Watchlist — Tracked Bills** — specific bills you follow. Click the ☆ on any
   bill in the feed to watch it, or add any bill by number (e.g. `HR 1215`) — even
   ones not in the priority feed (fetched individually and kept current on the
@@ -182,7 +184,7 @@ rm -f cache.db cache.db-wal cache.db-shm
 | POST   | `/api/stocks/add` | Add a ticker (`{"ticker":"AAPL"}`), auto-sorted |
 | DELETE | `/api/stocks/{ticker}` | Remove a ticker from the interface |
 | GET    | `/api/bills`   | Cached priority bills (Congress.gov → LegiScan) |
-| GET    | `/api/movers`  | Bills whose stage changed (snapshot diff) |
+| GET    | `/api/timeline` | Chronological bills + USASpending contracts |
 | GET    | `/api/bills/detail/{key}` | Lazy full bill detail (cached 6h) |
 | GET    | `/api/watchlist` | Watched bills + status-change highlights |
 | POST   | `/api/watchlist/add` | Watch a bill (`{"key":...}` or `{"identifier":"HR 1215"}`) |

@@ -4,7 +4,7 @@
 
 // Version for cache-busting dynamically-imported modules (bump on JS changes;
 // keep in sync with the ?v= on index.html so a normal reload picks up new code).
-const ASSET_V = "8";
+const ASSET_V = "10";
 
 const indicator = document.getElementById("refresh-indicator");
 const dashboard = document.getElementById("dashboard");
@@ -18,7 +18,9 @@ const PLANNED_PANELS = ["Watchlist"];
 
 let panelMeta = [];          // [{id, title, order}, ...]
 const panelMods = {};        // id -> imported module (cached)
-let expandedId = null;       // id of the currently expanded panel, or null
+// id of the currently expanded panel (persisted, so a browser reload keeps you
+// on the expanded tab instead of dropping back to the 2x2 dashboard).
+let expandedId = localStorage.getItem("expandedPanel") || null;
 
 function fmtTime(iso) {
   if (!iso) return "never";
@@ -203,8 +205,15 @@ async function loadDashboard(meta) {
 // --- expanded (full-screen) view -----------------------------------------
 async function openExpanded(id) {
   const p = panelMeta.find((x) => x.id === id);
-  if (!p) return;
+  if (!p) {
+    // saved panel no longer exists -> clear and show the dashboard
+    expandedId = null;
+    localStorage.removeItem("expandedPanel");
+    dashboard.hidden = false;
+    return;
+  }
   expandedId = id;
+  localStorage.setItem("expandedPanel", id);
   expandedTitle.textContent = p.title;
   // Empty the panel's quadrant copy first. Otherwise it keeps the same element
   // ids (e.g. #stock-add-input, #stock-suggest), and document.getElementById in
@@ -221,6 +230,7 @@ async function openExpanded(id) {
 async function closeExpanded() {
   const id = expandedId;
   expandedId = null;
+  localStorage.removeItem("expandedPanel");
   expanded.hidden = true;
   expandedBody.innerHTML = "";
   dashboard.hidden = false;
@@ -258,10 +268,19 @@ async function openBillDetail(key, identifier) {
       detailBody.innerHTML = `<div class="error-box">${esc(data.detail || "Could not load bill detail.")}</div>`;
       return;
     }
-    renderBillDetail(data.detail, data.stale);
+    renderBillDetail(data);
   } catch (e) {
     detailBody.innerHTML = `<div class="error-box">Network error loading bill detail.</div>`;
   }
+}
+
+function fmtMoney(n) {
+  if (n == null) return "—";
+  const a = Math.abs(n);
+  if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
+  if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
+  if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "K";
+  return "$" + Number(n).toLocaleString();
 }
 
 function closeBillDetail() {
@@ -273,12 +292,13 @@ function section(title, inner) {
   return `<section class="detail-section"><h3>${esc(title)}</h3>${inner}</section>`;
 }
 
-function renderBillDetail(d, stale) {
+function renderBillDetail(resp) {
+  const d = resp.detail || {};
   const member = (m) =>
     `${esc(m.name)}${m.party || m.state ? ` <span class="muted">(${esc(m.party)}-${esc(m.state)})</span>` : ""}`;
 
   let html = "";
-  if (stale) html += `<p class="muted">Showing a cached copy (Congress.gov is unreachable right now).</p>`;
+  if (resp.stale) html += `<p class="muted">Showing a cached copy (Congress.gov is unreachable right now).</p>`;
 
   // Overview
   const meta = [
@@ -334,8 +354,50 @@ function renderBillDetail(d, stale) {
       `<ul class="action-list">${d.actions.map((a) =>
         `<li><span class="bill-date">${esc(a.date)}</span> — ${esc(a.text)}</li>`).join("")}</ul>`);
 
+  // Related stocks for the federal priority this bill belongs to
+  if (resp.related_category && resp.related_stocks && resp.related_stocks.length) {
+    const rows = resp.related_stocks.map((q) => {
+      if (q.status !== "ok" || q.price == null)
+        return `<li class="rel-stock"><span class="sym">${esc(q.ticker)}</span><span class="muted">no data</span></li>`;
+      const up = q.change > 0, down = q.change < 0;
+      const cls = up ? "chg-up" : down ? "chg-down" : "chg-flat";
+      const arrow = up ? "▲" : down ? "▼" : "▬";
+      const sign = up ? "+" : "";
+      return `<li class="rel-stock"><span class="sym">${esc(q.ticker)}</span>` +
+        `<span>$${q.price.toFixed(2)}</span>` +
+        `<span class="${cls}"><span aria-hidden="true">${arrow}</span> ${sign}${q.change_pct.toFixed(2)}%</span></li>`;
+    }).join("");
+    html += section(`Related stocks — ${esc(resp.related_category)}`,
+      `<ul class="rel-stocks">${rows}</ul>`);
+  }
+
   detailBody.innerHTML = html;
 }
+
+// Contract detail (from the Policy Timeline) — shows the Award Description.
+// The contract object is passed in the event (already cached on the timeline),
+// so no extra fetch is needed.
+window.addEventListener("open-contract-detail", (e) => {
+  const c = e.detail.contract || {};
+  detailTitle.textContent = c.recipient || "Contract";
+  billDetail.hidden = false;
+  document.getElementById("detail-back").focus();
+  const meta = [
+    c.award_type && `Type: ${esc(c.award_type)}`,
+    c.agency && `Agency: ${esc(c.agency)}`,
+    c.date && `Updated: ${esc(c.date)}`,
+  ].filter(Boolean).join(" · ");
+  let html = `<div class="detail-overview"><div class="detail-billtitle">${esc(c.recipient || "Contract")}</div>` +
+    (meta ? `<div class="muted">${meta}</div>` : "") +
+    (c.url ? `<div><a href="${esc(c.url)}" target="_blank" rel="noopener">View on USASpending ↗</a></div>` : "") +
+    `</div>` +
+    `<div class="stats-grid">` +
+    `<div class="stat"><span class="stat-k">Obligations</span><span class="stat-v">${fmtMoney(c.obligations)}</span></div>` +
+    `<div class="stat"><span class="stat-k">Outlays</span><span class="stat-v">${fmtMoney(c.outlays)}</span></div>` +
+    `</div>` +
+    section("Award description", `<p class="detail-summary">${esc(c.description || "No description provided.")}</p>`);
+  detailBody.innerHTML = html;
+});
 
 document.getElementById("detail-back").addEventListener("click", closeBillDetail);
 window.addEventListener("open-bill-detail", (e) =>
@@ -398,8 +460,11 @@ document
 
 async function boot() {
   const meta = await loadMeta();
+  // If restoring an expanded panel (e.g. after a browser reload), keep the grid
+  // hidden during build so it doesn't flash before the expanded view appears.
+  if (expandedId) dashboard.hidden = true;
   await loadDashboard(meta);
-  // Preserve the expanded view across a refresh.
+  // Preserve / restore the expanded view across a refresh or reload.
   if (expandedId) await openExpanded(expandedId);
 }
 

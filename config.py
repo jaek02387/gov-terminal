@@ -124,32 +124,46 @@ CURRENT_CONGRESS = (datetime.date.today().year - 1789) // 2 + 1
 # concurrent resolutions, which are mostly ceremonial/procedural noise.
 SUBSTANTIVE_BILL_TYPES = ["hr", "s", "hjres", "sjres"]
 
-# Keywords used to keep bills relevant to the federal priorities above. Matched
-# as whole words against the bill TITLE *and* its latest-action text (so a bill
-# referred to e.g. the Committee on Armed Services is caught even if its title
-# has no keyword). Edit freely -- a wider list = wider net (more recall, a bit
-# less precision).
+# Bill keywords GROUPED BY the same 8 priorities as the stocks (keys match
+# STOCK_CATEGORIES exactly). One source of truth: used to FILTER bills (title)
+# and to CLASSIFY each bill into a priority -> which drives the timeline's policy
+# label and the "related stocks" shown in the bill detail. Matched as whole words.
+BILL_PRIORITY_KEYWORDS: dict[str, list[str]] = {
+    "1. Defense & Nuclear Modernization": [
+        "defense", "defense industrial", "national security", "armed forces",
+        "missile", "hypersonic", "munitions", "warfighter",
+    ],
+    "2. Nuclear Power / Reactor Buildout": [
+        "nuclear", "reactor", "uranium", "enrichment", "small modular reactor",
+    ],
+    "3. Critical Minerals & Domestic Supply Chains": [
+        # NOTE: generic terms like "supply chain"/"domestic manufacturing" are
+        # intentionally excluded -- they cross-cut priorities (e.g. "semiconductor
+        # supply chain") and would mis-classify into this bucket.
+        "critical mineral", "critical minerals", "rare earth", "mining", "battery",
+    ],
+    "4. AI Infrastructure & Data Centers": [
+        "semiconductor", "chip", "artificial intelligence", "machine learning",
+        "data center", "quantum",
+    ],
+    "5. Energy Dominance": [
+        "energy", "natural gas", "liquefied natural gas", "pipeline", "grid",
+        "electricity", "petroleum", "drilling",
+    ],
+    "6. Domestic Pharmaceutical Manufacturing": [
+        "pharmaceutical", "drug manufacturing", "active pharmaceutical ingredient",
+    ],
+    "7. Shipbuilding & Maritime": [
+        "shipbuilding", "shipyard", "naval", "submarine", "maritime",
+    ],
+    "8. Drones & Space": [
+        "drone", "unmanned", "satellite", "space launch", "launch vehicle",
+    ],
+}
+
+# Flattened union of all priority keywords (whole-word title filter + USASpending).
 BILL_SEARCH_TERMS: list[str] = [
-    # 1. Defense & nuclear modernization
-    "defense", "defense industrial", "national security", "armed forces",
-    "missile", "hypersonic", "munitions", "warfighter",
-    # 2. Nuclear power / reactor buildout
-    "nuclear", "reactor", "uranium", "enrichment", "small modular reactor",
-    # 3. Critical minerals & domestic supply chains
-    "critical mineral", "critical minerals", "rare earth", "mining", "battery",
-    "supply chain", "domestic manufacturing",
-    # 4. AI infrastructure & data centers
-    "semiconductor", "chip", "artificial intelligence", "machine learning",
-    "data center", "quantum",
-    # 5. Energy dominance
-    "energy", "natural gas", "liquefied natural gas", "pipeline", "grid",
-    "electricity", "petroleum", "drilling",
-    # 6. Domestic pharmaceutical manufacturing
-    "pharmaceutical", "drug manufacturing", "active pharmaceutical ingredient",
-    # 7. Shipbuilding & maritime
-    "shipbuilding", "shipyard", "naval", "submarine", "maritime",
-    # 8. Drones & space
-    "drone", "unmanned", "satellite", "space launch", "launch vehicle",
+    kw for kws in BILL_PRIORITY_KEYWORDS.values() for kw in kws
 ]
 
 # Committee names matched against the latest-action text ONLY (a bill "Referred
@@ -160,6 +174,17 @@ BILL_COMMITTEE_TERMS: list[str] = [
     "armed services",
     "strategic forces",
     "seapower",
+]
+# Committee-matched bills (no title keyword) are classified to this priority.
+BILL_COMMITTEE_CATEGORY = "1. Defense & Nuclear Modernization"
+
+# Curated, high-signal priority keywords for the USASpending contract search.
+# (The full BILL_SEARCH_TERMS list is too broad for USASpending's keyword OR
+# search -- it 503s -- so this is a distinctive subset across the priorities.)
+CONTRACT_KEYWORDS: list[str] = [
+    "defense", "nuclear", "uranium", "semiconductor", "rare earth",
+    "critical minerals", "shipbuilding", "submarine", "missile", "drone",
+    "satellite", "pharmaceutical",
 ]
 
 # A bill is flagged "NEW" in the Bills tab if it was first seen within this many days.

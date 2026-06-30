@@ -366,12 +366,12 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 .notice code { background: #0b1118; padding: 0 0.25rem; border-radius: 3px; }
 .panel-meta { color: var(--fg-dim); font-size: 0.8rem; margin: 0.25rem 0 0.75rem; }
 
-.bill-list, .mover-list { list-style: none; margin: 0; padding: 0; }
-.bill, .mover {
+.bill-list { list-style: none; margin: 0; padding: 0; }
+.bill {
   padding: 0.6rem 0.25rem;
   border-bottom: 1px solid #1d2731;
 }
-.bill-head, .mover-head {
+.bill-head {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -385,8 +385,52 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 .bill-title a:hover, .bill-title a:focus-visible { color: var(--accent); }
 .bill-action { font-size: 0.78rem; color: var(--fg-dim); }
 .bill-date { color: var(--fg); }
-.mover-arrow { color: var(--fg-dim); font-weight: bold; }
-.mover-when { font-size: 0.75rem; color: var(--fg-dim); margin-left: auto; }
+
+/* ---- Policy Timeline (vertical) ---- */
+.timeline { padding: 0.25rem 0; }
+.tl-list { list-style: none; margin: 0; padding: 0 0 0 1.5rem; position: relative; }
+.tl-list::before {
+  content: ""; position: absolute; left: 0.5rem; top: 0.3rem; bottom: 0.3rem;
+  width: 2px; background: var(--panel-border);
+}
+.tl-item { position: relative; margin: 0 0 0.9rem; }
+.tl-dot {
+  position: absolute; left: -1.18rem; top: 1.25rem;
+  width: 0.7rem; height: 0.7rem; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg);
+}
+.tl-contract .tl-dot { background: #57d9a3; }
+.tl-date { font-size: 0.72rem; color: var(--fg-dim); margin-bottom: 0.15rem; }
+.tl-card {
+  background: var(--panel-bg); border: 1px solid var(--panel-border);
+  border-radius: 8px; padding: 0.6rem 0.75rem; cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transform-origin: left center;
+}
+.tl-bill .tl-card { border-left: 3px solid var(--accent); }
+.tl-contract .tl-card { border-left: 3px solid #57d9a3; }
+.tl-card:hover, .tl-card:focus-visible {
+  transform: scale(1.03); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  border-color: var(--accent); outline: none;
+}
+.tl-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.2rem; }
+.tl-title { font-size: 0.92rem; font-weight: bold; margin: 0.1rem 0; }
+.tl-title a { color: var(--fg); text-decoration: underline; }
+.tl-title a:hover { color: var(--accent); }
+.tl-meta { font-size: 0.78rem; color: var(--fg-dim); }
+.contract-tag {
+  font-size: 0.66rem; font-weight: bold; letter-spacing: 0.05em;
+  color: #000; background: #57d9a3; padding: 0.05rem 0.4rem; border-radius: 999px;
+}
+.award-type { font-size: 0.72rem; color: var(--fg-dim); }
+
+/* Related stocks shown in the bill detail */
+.rel-stocks { list-style: none; margin: 0; padding: 0; }
+.rel-stock {
+  display: flex; gap: 0.75rem; align-items: baseline;
+  padding: 0.25rem 0; border-bottom: 1px solid #1d2731;
+}
+.rel-stock .sym { font-weight: bold; min-width: 4rem; color: var(--accent); }
 
 /* Watch (star) toggle + status-change highlight */
 .watch-btn {
