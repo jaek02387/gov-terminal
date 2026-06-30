@@ -24,6 +24,12 @@ function stageClass(stage) {
   return "stage-" + String(stage || "").toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "");
 }
 
+// Federal-priority label chip (strips the leading "N. " for a clean tag).
+function priorityTag(category) {
+  if (!category) return `<span class="priority-tag untagged" title="Federal priority">Other</span>`;
+  return `<span class="priority-tag" title="Federal priority">${esc(String(category).replace(/^\d+\.\s*/, ""))}</span>`;
+}
+
 function billCard(it) {
   const title = it.url
     ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" class="tl-link" data-stop="1">${esc(it.title)}</a>`
@@ -35,9 +41,10 @@ function billCard(it) {
     `<div class="tl-head"><span class="bill-id">${esc(it.identifier)}</span>` +
     `<span class="stage-badge ${stageClass(it.stage)}">${esc(it.stage)}</span>` +
     (it.chamber ? `<span class="bill-chamber">${esc(it.chamber)}</span>` : "") +
+    priorityTag(it.category) +
     `</div>` +
     `<div class="tl-title">${title}</div>` +
-    `<div class="tl-meta">${it.category ? esc(it.category) : "Federal priority"} · ${fmtDate(it.date)}</div>` +
+    `<div class="tl-meta">${fmtDate(it.date)}</div>` +
     `</div></li>`;
 }
 
@@ -48,6 +55,7 @@ function contractCard(it) {
     `<div class="tl-card" role="button" tabindex="0" aria-label="Open contract description for ${esc(it.recipient)}">` +
     `<div class="tl-head"><span class="contract-tag">CONTRACT</span>` +
     (it.award_type ? `<span class="award-type">${esc(it.award_type)}</span>` : "") +
+    priorityTag(it.category) +
     `</div>` +
     `<div class="tl-title">${esc(it.recipient)}</div>` +
     `<div class="tl-meta">Obligations ${fmtMoney(it.obligations)} · Outlays ${fmtMoney(it.outlays)}</div>` +

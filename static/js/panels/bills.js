@@ -18,6 +18,13 @@ function stageClass(stage) {
     .replace(/^-|-$/g, "");
 }
 
+// Federal-priority label chip (strips the leading "N. " for a clean tag).
+function priorityTag(category) {
+  if (!category) return `<span class="priority-tag untagged" title="Federal priority">Other</span>`;
+  const label = String(category).replace(/^\d+\.\s*/, "");
+  return `<span class="priority-tag" title="Federal priority">${esc(label)}</span>`;
+}
+
 function fmtDate(d) {
   if (!d) return "";
   const dt = new Date(d);
@@ -40,6 +47,7 @@ function billRow(b) {
     (b.is_new ? `<span class="new-badge" title="Added recently">NEW</span>` : "") +
     `<span class="stage-badge ${stageClass(b.stage)}">${esc(b.stage)}</span>` +
     (b.chamber ? `<span class="bill-chamber">${esc(b.chamber)}</span>` : "") +
+    priorityTag(b.category) +
     `<button class="detail-btn" data-key="${esc(b.key)}" data-id="${esc(b.identifier)}" ` +
     `type="button" aria-label="Show details for ${esc(b.identifier)}">Details</button>` +
     `</div>` +

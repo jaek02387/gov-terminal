@@ -424,6 +424,19 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 }
 .award-type { font-size: 0.72rem; color: var(--fg-dim); }
 
+/* Federal-priority label chip (Bills tab + Policy Timeline) */
+.priority-tag {
+  font-size: 0.66rem;
+  font-weight: bold;
+  padding: 0.08rem 0.5rem;
+  border-radius: 999px;
+  background: #16263a;
+  color: var(--accent);
+  border: 1px solid var(--panel-border);
+  white-space: nowrap;
+}
+.priority-tag.untagged { color: var(--fg-dim); background: #1a212b; }
+
 /* Related stocks shown in the bill detail */
 .rel-stocks { list-style: none; margin: 0; padding: 0; }
 .rel-stock {

@@ -63,6 +63,10 @@ class USASpendingSource(Source):
                 return None
             recipient = a.get("Recipient Name") or "(unnamed recipient)"
             desc = a.get("Description") or ""
+            agency = a.get("Awarding Agency") or ""
+            # Classify on description + recipient + awarding agency (the agency,
+            # e.g. "Department of Defense"/"Department of Energy", classifies most
+            # terse contract descriptions that would otherwise be uncategorized).
             return {
                 "key": str(aid),
                 "data": {
@@ -72,9 +76,9 @@ class USASpendingSource(Source):
                     "outlays": a.get("Total Outlays"),
                     "award_type": a.get("Contract Award Type") or a.get("Award Type") or "",
                     "description": desc,
-                    "agency": a.get("Awarding Agency") or "",
+                    "agency": agency,
                     "date": (a.get("Last Modified Date") or "")[:10],
-                    "category": bills.classify_category(f"{desc} {recipient}"),
+                    "category": bills.classify_category(f"{desc} {recipient} {agency}"),
                     "url": f"https://www.usaspending.gov/award/{aid}",
                     "source": "USASpending",
                 },
