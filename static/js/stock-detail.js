@@ -13,7 +13,7 @@ let chartEvents = [];  // policy/contract events to mark on the chart
 let fullPoints = [];   // all points for the current range (zoom slices this)
 let zoomLo = 0, zoomHi = 0;  // visible index window into fullPoints
 const MIN_ZOOM = 4;    // don't zoom below ~5 points
-const ZOOM_SENSITIVITY = 0.0016;  // lower = slower/gentler trackpad zoom
+const ZOOM_SENSITIVITY = 0.0025;  // lower = slower/gentler trackpad zoom
 let activePopover = null;
 let _popDocHandler = null;  // outside-click listener while a popover is open
 let _popKeyHandler = null;  // Escape-closes-popover listener (capture phase)
@@ -296,10 +296,7 @@ function highlightEvent(idx, on) {
     g.querySelectorAll(".ev-dot").forEach((d) => d.setAttribute("r", on ? "6" : "4"));
   });
   const li = host.querySelector(`#events-area .ev-item[data-idx="${idx}"]`);
-  if (li) {
-    li.classList.toggle("ev-active", on);
-    if (on) li.scrollIntoView({ block: "nearest" });
-  }
+  if (li) li.classList.toggle("ev-active", on);  // no auto-scroll: it can yank the chart under the cursor
 }
 
 function wireMarkers(svg) {
