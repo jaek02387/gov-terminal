@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import catalog
+import config
 import db
 import news as newsapi
 from sources import stocks
@@ -131,6 +132,37 @@ def _hist_ttl(range_key: str) -> int:
     return 600 if range_key in ("1D", "1W") else 6 * 3600  # intraday short, else 6h
 
 
+def _stock_events(ticker: str, limit: int = 40) -> list[dict]:
+    """Policy/contract events to mark on this stock's chart: bills in the stock's
+    federal priority + contracts awarded to the company (recipient->ticker).
+    Computed fresh from the cache (cheap, always current)."""
+    cats = [c for c, ts in config.STOCK_CATEGORIES.items() if ticker in ts]
+    events: list[dict] = []
+
+    for b in db.read_snapshot("congress"):
+        if b.get("category") in cats and b.get("latest_action_date"):
+            events.append({
+                "type": "bill", "date": b["latest_action_date"], "key": b.get("_key"),
+                "identifier": b.get("identifier"), "title": b.get("title"),
+            })
+
+    aliases = config.COMPANY_ALIASES.get(ticker, [])
+    if aliases:
+        for c in db.read_snapshot("usaspending"):
+            recipient = (c.get("recipient") or "").lower()
+            if c.get("date") and any(a in recipient for a in aliases):
+                events.append({
+                    "type": "contract", "date": c["date"], "key": c.get("_key"),
+                    "recipient": c.get("recipient"), "obligations": c.get("obligations"),
+                    "outlays": c.get("outlays"), "award_type": c.get("award_type"),
+                    "description": c.get("description"), "agency": c.get("agency"),
+                    "category": c.get("category"), "url": c.get("url"),
+                })
+
+    events.sort(key=lambda e: e["date"], reverse=True)  # newest first
+    return events[:limit]
+
+
 @router.get("/history/{ticker}")
 def stock_history(ticker: str, range: str = "1M") -> dict:
     ticker = ticker.strip().upper()
@@ -183,6 +215,7 @@ def stock_detail(ticker: str, range: str = "1M") -> dict:
         "history": hist.get("points", []),
         "range": rng,
         "ranges": list(stocks.HISTORY_RANGES.keys()),
+        "events": _stock_events(ticker),
         "news": news_data,
     }
 

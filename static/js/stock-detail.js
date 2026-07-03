@@ -9,6 +9,11 @@ let curRange = "1M";
 const CW = 720, CH = 240, PADL = 6, PADR = 54, PADT = 14, PADB = 16;
 let chartPoints = [];
 let chartMin = 0, chartMax = 1;
+let chartEvents = [];  // policy/contract events to mark on the chart
+let fullPoints = [];   // all points for the current range (zoom slices this)
+let zoomLo = 0, zoomHi = 0;  // visible index window into fullPoints
+const MIN_ZOOM = 4;    // don't zoom below ~5 points
+let activePopover = null;
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -57,6 +62,25 @@ function changeHtml(points) {
     `(${sign}${num(pct)}%)</span> <span class="range-tag">${esc(curRange)}</span>`;
 }
 
+// Events within the visible time window, each mapped to the nearest point's x.
+function visibleEvents(points) {
+  if (!points || points.length < 2 || !chartEvents.length) return [];
+  const times = points.map((p) => new Date(p.t).getTime());
+  const t0 = times[0], t1 = times[times.length - 1];
+  const out = [];
+  chartEvents.forEach((ev, idx) => {
+    const et = new Date(ev.date).getTime();
+    if (isNaN(et) || et < t0 || et > t1) return;
+    let best = Infinity, nearest = 0;
+    for (let i = 0; i < times.length; i++) {
+      const d = Math.abs(times[i] - et);
+      if (d < best) { best = d; nearest = i; }
+    }
+    out.push({ ev, idx, x: _xOf(nearest, points.length) });
+  });
+  return out;
+}
+
 function drawChart(points) {
   if (!points || points.length < 2) return `<p class="muted">No chart data for this range.</p>`;
   const closes = points.map((p) => p.close);
@@ -87,6 +111,15 @@ function drawChart(points) {
     `</g>` +
     // transparent hit area so mousemove fires across the whole chart
     `<rect class="cross-hit" x="0" y="0" width="${CW}" height="${CH}" fill="transparent" pointer-events="all"/>` +
+    // event markers on top (dashed line + top dot with a hover title)
+    visibleEvents(points).map((m) => {
+      const cls = m.ev.type === "contract" ? "ev-contract" : "ev-bill";
+      const label = m.ev.type === "contract" ? m.ev.recipient : m.ev.identifier;
+      const x = m.x.toFixed(1);
+      return `<line class="ev-line ${cls}" x1="${x}" y1="${PADT}" x2="${x}" y2="${CH - PADB}"/>` +
+        `<circle class="ev-dot ${cls}" data-idx="${m.idx}" cx="${x}" cy="${PADT}" r="4">` +
+        `<title>${esc(m.ev.type === "contract" ? "Contract" : "Bill")}: ${esc(label)} (${esc(m.ev.date)})</title></circle>`;
+    }).join("") +
     `</svg>`;
 }
 
@@ -129,6 +162,50 @@ function renderChart(points) {
   wireChartHover(chartEl.querySelector("svg"));
   const chg = host.querySelector("#stock-change");
   if (chg) chg.innerHTML = changeHtml(points);
+  renderEvents(points);
+}
+
+function openEvent(ev) {
+  if (!ev) return;
+  if (ev.type === "contract") {
+    window.dispatchEvent(new CustomEvent("open-contract-detail", { detail: { contract: ev } }));
+  } else {
+    window.dispatchEvent(new CustomEvent("open-bill-detail", { detail: { key: ev.key, identifier: ev.identifier } }));
+  }
+}
+
+// Interactive list of the events marked on the chart (in the current range).
+function renderEvents(points) {
+  const el = host.querySelector("#events-area");
+  if (!el) return;
+  const evs = visibleEvents(points);
+  if (!evs.length) {
+    el.innerHTML = `<p class="muted">No bills or contracts in this range for ${esc(ticker)}. ` +
+      `Try a longer range (6M / 1Y / 5Y).</p>`;
+    return;
+  }
+  const legend = `<div class="ev-legend"><span class="ev-key ev-bill">● Bill</span>` +
+    `<span class="ev-key ev-contract">● Contract</span></div>`;
+  const rows = evs.map(({ ev, idx }) => {
+    const chip = ev.type === "contract"
+      ? `<span class="ev-chip ev-contract">Contract</span>`
+      : `<span class="ev-chip ev-bill">Bill</span>`;
+    const label = ev.type === "contract"
+      ? esc(ev.recipient)
+      : `${esc(ev.identifier)} — ${esc(ev.title)}`;
+    return `<li class="ev-item" data-idx="${idx}" role="button" tabindex="0" ` +
+      `aria-label="Open ${ev.type} detail">${chip}` +
+      `<span class="ev-date">${esc(fmtDate(ev.date))}</span>` +
+      `<span class="ev-label">${label}</span></li>`;
+  }).join("");
+  el.innerHTML = legend + `<ul class="ev-list">${rows}</ul>`;
+  el.querySelectorAll(".ev-item").forEach((li) => {
+    const go = () => openEvent(chartEvents[li.dataset.idx]);
+    li.addEventListener("click", go);
+    li.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+    });
+  });
 }
 
 function statsGrid(s) {
@@ -191,6 +268,8 @@ export async function open(bodyEl, tkr, name) {
       return;
     }
 
+    chartEvents = d.events || [];  // bills in this priority + contracts to this company
+
     const price = (d.quote && d.quote.price != null)
       ? d.quote.price
       : (d.history && d.history.length ? d.history[d.history.length - 1].close : null);
@@ -207,10 +286,12 @@ export async function open(bodyEl, tkr, name) {
       `</div>` +
       rangeBar(d.ranges || ["1D", "1W", "1M", "6M", "1Y", "5Y"]) +
       `<div id="chart-area" class="chart-area"></div>` +
+      `<section class="detail-section"><h3>Policy &amp; contract events on this chart</h3>` +
+      `<div id="events-area"></div></section>` +
       `<section class="detail-section"><h3>Key stats</h3>${statsGrid(d.stats || {})}</section>` +
       `<section class="detail-section"><h3>News</h3>${newsList(d.news)}</section>`;
 
-    renderChart(d.history); // draw chart + wire hover + set initial % change
+    renderChart(d.history); // draw chart + markers + events list + % change
 
     host.querySelectorAll(".range-btn").forEach((b) =>
       b.addEventListener("click", () => changeRange(b.dataset.range))

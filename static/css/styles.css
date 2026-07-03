@@ -581,6 +581,34 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 .cross-date { fill: var(--fg-dim); font-size: 10px; }
 .range-tag { color: var(--fg-dim); font-size: 0.8rem; }
 
+/* Event markers on the price chart (bills + contracts) */
+.ev-line { stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; pointer-events: none; opacity: 0.7; }
+.ev-dot { cursor: default; }
+.ev-line.ev-bill, .ev-dot.ev-bill { stroke: var(--accent); }
+.ev-dot.ev-bill { fill: var(--accent); }
+.ev-line.ev-contract, .ev-dot.ev-contract { stroke: #57d9a3; }
+.ev-dot.ev-contract { fill: #57d9a3; }
+
+/* Events list under the chart */
+.ev-legend { display: flex; gap: 1rem; font-size: 0.75rem; margin: 0 0 0.4rem; }
+.ev-key.ev-bill { color: var(--accent); }
+.ev-key.ev-contract { color: #57d9a3; }
+.ev-list { list-style: none; margin: 0; padding: 0; }
+.ev-item {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  padding: 0.35rem 0.4rem; border-bottom: 1px solid #1d2731;
+  cursor: pointer; border-radius: 4px;
+}
+.ev-item:hover, .ev-item:focus-visible { background: #16202b; outline: none; }
+.ev-chip {
+  font-size: 0.62rem; font-weight: bold; padding: 0.05rem 0.4rem;
+  border-radius: 999px; white-space: nowrap; color: #000;
+}
+.ev-chip.ev-bill { background: var(--accent); }
+.ev-chip.ev-contract { background: #57d9a3; }
+.ev-date { font-size: 0.72rem; color: var(--fg-dim); white-space: nowrap; min-width: 6rem; }
+.ev-label { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));

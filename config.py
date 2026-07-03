@@ -68,6 +68,21 @@ def all_tickers() -> list[str]:
     return list(seen.keys())
 
 
+# Map a tracked ticker to lowercased name fragments of its company, so a
+# USASpending contract recipient (e.g. "LOCKHEED MARTIN CORPORATION") can be
+# linked to the stock (LMT) and marked on its chart. Edit as you add tickers.
+COMPANY_ALIASES: dict[str, list[str]] = {
+    "LMT": ["lockheed martin"], "RTX": ["rtx", "raytheon"], "NOC": ["northrop grumman"],
+    "GD": ["general dynamics"], "HII": ["huntington ingalls"], "CEG": ["constellation energy"],
+    "VST": ["vistra"], "CCJ": ["cameco"], "OKLO": ["oklo"], "SMR": ["nuscale"],
+    "MP": ["mp materials"], "UUUU": ["energy fuels"], "ALB": ["albemarle"],
+    "NVDA": ["nvidia"], "MSFT": ["microsoft"], "AMZN": ["amazon"],
+    "GOOGL": ["alphabet", "google"], "VRT": ["vertiv"], "XOM": ["exxon"],
+    "CVX": ["chevron"], "LNG": ["cheniere"], "EQT": ["eqt"], "LLY": ["eli lilly"],
+    "PFE": ["pfizer"], "AVAV": ["aerovironment"], "KTOS": ["kratos"], "RKLB": ["rocket lab"],
+}
+
+
 # Catch-all 9th category for user-added tickers that don't match any priority.
 OTHER_CATEGORY = "9. Other"
 
