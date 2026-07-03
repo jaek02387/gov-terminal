@@ -14,6 +14,9 @@ let fullPoints = [];   // all points for the current range (zoom slices this)
 let zoomLo = 0, zoomHi = 0;  // visible index window into fullPoints
 const MIN_ZOOM = 4;    // don't zoom below ~5 points
 let activePopover = null;
+let _popDocHandler = null;  // outside-click listener while a popover is open
+let _popKeyHandler = null;  // Escape-closes-popover listener (capture phase)
+let _zoomRaf = 0;           // coalesces rapid wheel events into one redraw
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -111,14 +114,19 @@ function drawChart(points) {
     `</g>` +
     // transparent hit area so mousemove fires across the whole chart
     `<rect class="cross-hit" x="0" y="0" width="${CW}" height="${CH}" fill="transparent" pointer-events="all"/>` +
-    // event markers on top (dashed line + top dot with a hover title)
+    // event markers on top: each is a group (dashed line + fat transparent hit
+    // circle + visible dot) so hover-highlight and click work as one unit.
     visibleEvents(points).map((m) => {
       const cls = m.ev.type === "contract" ? "ev-contract" : "ev-bill";
+      const kind = m.ev.type === "contract" ? "Contract" : "Bill";
       const label = m.ev.type === "contract" ? m.ev.recipient : m.ev.identifier;
       const x = m.x.toFixed(1);
-      return `<line class="ev-line ${cls}" x1="${x}" y1="${PADT}" x2="${x}" y2="${CH - PADB}"/>` +
-        `<circle class="ev-dot ${cls}" data-idx="${m.idx}" cx="${x}" cy="${PADT}" r="4">` +
-        `<title>${esc(m.ev.type === "contract" ? "Contract" : "Bill")}: ${esc(label)} (${esc(m.ev.date)})</title></circle>`;
+      return `<g class="ev-marker ${cls}" data-idx="${m.idx}" tabindex="0" role="button" ` +
+        `aria-label="${esc(kind)}: ${esc(label)}. Activate for details.">` +
+        `<line class="ev-line ${cls}" x1="${x}" y1="${PADT}" x2="${x}" y2="${CH - PADB}"/>` +
+        `<circle class="ev-hit" cx="${x}" cy="${PADT}" r="10" fill="transparent" pointer-events="all"/>` +
+        `<circle class="ev-dot ${cls}" cx="${x}" cy="${PADT}" r="4">` +
+        `<title>${esc(kind)}: ${esc(label)} (${esc(m.ev.date)})</title></circle></g>`;
     }).join("") +
     `</svg>`;
 }
@@ -155,14 +163,171 @@ function wireChartHover(svg) {
   svg.addEventListener("mouseleave", () => cross.setAttribute("opacity", "0"));
 }
 
+function isZoomed() {
+  return zoomLo > 0 || zoomHi < fullPoints.length - 1;
+}
+
+// Draw the currently-visible zoom window (a slice of fullPoints) into #chart-area,
+// then (re)wire hover, zoom, markers and rebuild the events list to match.
+function drawVisible() {
+  closePopover();
+  const chartEl = host && host.querySelector("#chart-area");
+  if (!chartEl) return;
+  const pts = fullPoints.slice(zoomLo, zoomHi + 1);
+  chartPoints = pts;
+  const resetBtn = isZoomed()
+    ? `<button type="button" class="zoom-reset" aria-label="Reset zoom to full range">Reset zoom</button>`
+    : "";
+  chartEl.innerHTML = drawChart(pts) + resetBtn;
+  const svg = chartEl.querySelector("svg");
+  wireChartHover(svg);
+  wireChartZoom(svg);
+  wireMarkers(svg);
+  const rb = chartEl.querySelector(".zoom-reset");
+  if (rb) rb.addEventListener("click", resetZoom);
+  renderEvents(pts);
+}
+
+// Entry point: load a fresh series, reset the zoom window, draw. The header
+// % change reflects the whole range (not the zoom window), matching the tag.
 function renderChart(points) {
-  chartPoints = points || [];
-  const chartEl = host.querySelector("#chart-area");
-  chartEl.innerHTML = drawChart(points);
-  wireChartHover(chartEl.querySelector("svg"));
+  fullPoints = points || [];
+  zoomLo = 0;
+  zoomHi = Math.max(0, fullPoints.length - 1);
+  drawVisible();
   const chg = host.querySelector("#stock-change");
-  if (chg) chg.innerHTML = changeHtml(points);
-  renderEvents(points);
+  if (chg) chg.innerHTML = changeHtml(fullPoints);
+}
+
+function resetZoom() {
+  if (!fullPoints.length) return;
+  zoomLo = 0;
+  zoomHi = fullPoints.length - 1;
+  drawVisible();
+}
+
+// Trackpad zoom: wheel / pinch over the chart narrows or widens the visible
+// index window, anchored at the cursor's x so you zoom toward what you point at.
+function wireChartZoom(svg) {
+  if (!svg || fullPoints.length < MIN_ZOOM + 2) return;
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();  // take over scroll -> zoom while the cursor is on the chart
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    const f = Math.max(0, Math.min(1,
+      (pt.matrixTransform(ctm.inverse()).x - PADL) / (CW - PADL - PADR)));
+    const curLen = zoomHi - zoomLo + 1;
+    const anchor = zoomLo + f * (curLen - 1);       // index under the cursor
+    const factor = e.deltaY < 0 ? 0.82 : 1 / 0.82;  // scroll up / pinch out = zoom in
+    let newLen = Math.round(curLen * factor);
+    newLen = Math.max(MIN_ZOOM + 1, Math.min(fullPoints.length, newLen));
+    if (newLen === curLen) return;
+    let lo = Math.round(anchor - f * (newLen - 1));
+    lo = Math.max(0, Math.min(fullPoints.length - newLen, lo));
+    const hi = lo + newLen - 1;
+    if (lo === zoomLo && hi === zoomHi) return;
+    zoomLo = lo; zoomHi = hi;
+    if (!_zoomRaf) _zoomRaf = requestAnimationFrame(() => { _zoomRaf = 0; drawVisible(); });
+  }, { passive: false });
+  svg.addEventListener("dblclick", (e) => { e.preventDefault(); resetZoom(); });
+}
+
+// Two-way highlight: light up a chart marker and its matching list row together.
+function highlightEvent(idx, on) {
+  if (idx == null || !host) return;
+  host.querySelectorAll(`.ev-marker[data-idx="${idx}"]`).forEach((g) => {
+    g.classList.toggle("ev-active", on);
+    g.querySelectorAll(".ev-dot").forEach((d) => d.setAttribute("r", on ? "6" : "4"));
+  });
+  const li = host.querySelector(`#events-area .ev-item[data-idx="${idx}"]`);
+  if (li) {
+    li.classList.toggle("ev-active", on);
+    if (on) li.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function wireMarkers(svg) {
+  if (!svg) return;
+  svg.querySelectorAll(".ev-marker").forEach((g) => {
+    const idx = g.dataset.idx;
+    const dot = g.querySelector(".ev-dot");
+    g.addEventListener("mouseenter", () => highlightEvent(idx, true));
+    g.addEventListener("mouseleave", () => highlightEvent(idx, false));
+    g.addEventListener("focus", () => highlightEvent(idx, true));
+    g.addEventListener("blur", () => highlightEvent(idx, false));
+    g.addEventListener("click", (e) => { e.stopPropagation(); showPopover(idx, dot); });
+    g.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showPopover(idx, dot); }
+    });
+  });
+}
+
+function closePopover() {
+  if (_popDocHandler) {
+    document.removeEventListener("mousedown", _popDocHandler);
+    _popDocHandler = null;
+  }
+  if (_popKeyHandler) {
+    document.removeEventListener("keydown", _popKeyHandler, true);
+    _popKeyHandler = null;
+  }
+  if (activePopover) { activePopover.remove(); activePopover = null; }
+}
+
+function popoverHtml(ev) {
+  const close = `<button class="ev-pop-close" type="button" aria-label="Close">×</button>`;
+  if (ev.type === "contract") {
+    const meta = [ev.award_type, ev.agency, fmtDate(ev.date)].filter(Boolean).map(esc).join(" · ");
+    return close +
+      `<div class="ev-pop-title">${esc(ev.recipient || "Contract")}</div>` +
+      (meta ? `<div class="ev-pop-meta">${meta}</div>` : "") +
+      `<div class="ev-pop-money"><span>Obligations <b>${money(ev.obligations)}</b></span>` +
+      `<span>Outlays <b>${money(ev.outlays)}</b></span></div>` +
+      `<div class="ev-pop-desc">${esc(ev.description || "No description provided.")}</div>` +
+      `<div class="ev-pop-actions">` +
+      (ev.url ? `<a href="${esc(ev.url)}" target="_blank" rel="noopener">USASpending ↗</a>` : "") +
+      `<button class="ev-pop-more" type="button">Full detail →</button></div>`;
+  }
+  return close +
+    `<div class="ev-pop-title">${esc(ev.identifier || "Bill")}</div>` +
+    (ev.title ? `<div class="ev-pop-desc">${esc(ev.title)}</div>` : "") +
+    (ev.date ? `<div class="ev-pop-meta">${esc(fmtDate(ev.date))}</div>` : "") +
+    `<div class="ev-pop-actions"><button class="ev-pop-more" type="button">Open bill detail →</button></div>`;
+}
+
+// Lightweight in-chart popover with the contract/bill description, anchored to
+// the clicked dot. Keeps the stock view (and its zoom) intact, unlike the full
+// overlay — which stays reachable via the "Full detail" action.
+function showPopover(idx, dotEl) {
+  closePopover();
+  const ev = chartEvents[idx];
+  const chartEl = host && host.querySelector("#chart-area");
+  if (!ev || !chartEl || !dotEl) return;
+  const pop = document.createElement("div");
+  pop.className = "ev-popover " + (ev.type === "contract" ? "ev-contract" : "ev-bill");
+  pop.setAttribute("role", "dialog");
+  pop.innerHTML = popoverHtml(ev);
+  chartEl.appendChild(pop);
+  const areaRect = chartEl.getBoundingClientRect();
+  const dotRect = dotEl.getBoundingClientRect();
+  const cx = dotRect.left - areaRect.left + dotRect.width / 2;
+  let left = cx - pop.offsetWidth / 2;
+  left = Math.max(4, Math.min(areaRect.width - pop.offsetWidth - 4, left));
+  pop.style.left = left + "px";
+  pop.style.top = (dotRect.bottom - areaRect.top + 6) + "px";
+  activePopover = pop;
+  pop.querySelector(".ev-pop-close").addEventListener("click", closePopover);
+  const more = pop.querySelector(".ev-pop-more");
+  if (more) more.addEventListener("click", () => { closePopover(); openEvent(ev); });
+  _popDocHandler = (e) => { if (activePopover && !activePopover.contains(e.target)) closePopover(); };
+  // Capture phase so Escape closes the popover before app.js closes the overlay.
+  _popKeyHandler = (e) => { if (e.key === "Escape" && activePopover) { e.stopPropagation(); closePopover(); } };
+  setTimeout(() => {
+    document.addEventListener("mousedown", _popDocHandler);
+    document.addEventListener("keydown", _popKeyHandler, true);
+  }, 0);
 }
 
 function openEvent(ev) {
@@ -200,11 +365,16 @@ function renderEvents(points) {
   }).join("");
   el.innerHTML = legend + `<ul class="ev-list">${rows}</ul>`;
   el.querySelectorAll(".ev-item").forEach((li) => {
-    const go = () => openEvent(chartEvents[li.dataset.idx]);
+    const idx = li.dataset.idx;
+    const go = () => openEvent(chartEvents[idx]);
     li.addEventListener("click", go);
     li.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
     });
+    li.addEventListener("mouseenter", () => highlightEvent(idx, true));
+    li.addEventListener("mouseleave", () => highlightEvent(idx, false));
+    li.addEventListener("focus", () => highlightEvent(idx, true));
+    li.addEventListener("blur", () => highlightEvent(idx, false));
   });
 }
 
@@ -286,6 +456,7 @@ export async function open(bodyEl, tkr, name) {
       `</div>` +
       rangeBar(d.ranges || ["1D", "1W", "1M", "6M", "1Y", "5Y"]) +
       `<div id="chart-area" class="chart-area"></div>` +
+      `<div class="chart-hint muted">Scroll or pinch to zoom · double-click to reset · click a ● for details</div>` +
       `<section class="detail-section"><h3>Policy &amp; contract events on this chart</h3>` +
       `<div id="events-area"></div></section>` +
       `<section class="detail-section"><h3>Key stats</h3>${statsGrid(d.stats || {})}</section>` +

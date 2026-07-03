@@ -564,7 +564,7 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 }
 .range-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
 
-.chart-area { margin: 0.3rem 0 0.8rem; }
+.chart-area { margin: 0.3rem 0 0.8rem; position: relative; }
 .price-chart { width: 100%; height: auto; display: block; }
 .price-chart .chart-line { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .price-chart .chart-fill { stroke: none; opacity: 0.16; }
@@ -608,6 +608,47 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 .ev-chip.ev-contract { background: #57d9a3; }
 .ev-date { font-size: 0.72rem; color: var(--fg-dim); white-space: nowrap; min-width: 6rem; }
 .ev-label { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Interactive markers: hover/focus highlight (two-way with the list) + click */
+.chart-hint { font-size: 0.7rem; margin: -0.35rem 0 0.7rem; }
+.ev-marker { cursor: pointer; }
+.ev-marker:focus { outline: none; }
+.ev-marker:focus-visible .ev-dot,
+.ev-marker.ev-active .ev-dot { stroke: var(--fg); stroke-width: 2; }
+.ev-marker.ev-active .ev-line { opacity: 1; stroke-width: 1.6; }
+.ev-item.ev-active { background: #1c2a38; }
+
+/* Reset-zoom affordance (shown only while zoomed) */
+.zoom-reset {
+  position: absolute; top: 6px; right: 8px;
+  background: rgba(11, 15, 20, 0.85); color: var(--fg);
+  border: 1px solid var(--panel-border); border-radius: 4px;
+  font-size: 0.7rem; padding: 0.15rem 0.5rem; cursor: pointer;
+}
+.zoom-reset:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+
+/* In-chart popover with a marker's contract/bill description */
+.ev-popover {
+  position: absolute; z-index: 5; width: min(20rem, 82%);
+  background: var(--panel-bg); border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--accent); border-radius: 6px;
+  padding: 0.55rem 0.7rem; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.ev-popover.ev-contract { border-left-color: #57d9a3; }
+.ev-pop-close {
+  position: absolute; top: 2px; right: 6px; padding: 0; line-height: 1;
+  background: none; border: none; color: var(--fg-dim); font-size: 1.15rem; cursor: pointer;
+}
+.ev-pop-close:hover { color: var(--fg); }
+.ev-pop-title { font-weight: bold; font-size: 0.9rem; padding-right: 1rem; }
+.ev-pop-meta { font-size: 0.72rem; color: var(--fg-dim); margin-top: 0.15rem; }
+.ev-pop-money { display: flex; gap: 1rem; font-size: 0.78rem; margin: 0.35rem 0; }
+.ev-pop-desc {
+  font-size: 0.8rem; line-height: 1.35; margin-top: 0.2rem;
+  max-height: 8rem; overflow-y: auto;
+}
+.ev-pop-actions { display: flex; gap: 0.9rem; align-items: center; margin-top: 0.5rem; font-size: 0.78rem; }
+.ev-pop-more { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 0.78rem; }
 
 .stats-grid {
   display: grid;
