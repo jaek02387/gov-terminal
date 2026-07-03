@@ -531,6 +531,10 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
   margin: 0 0 0.5rem;
 }
 .detail-summary { line-height: 1.5; }
+/* Cap long-form prose to a readable measure while the chart, stats grid and
+   event rows stay full-width. In rem so it scales with the A-/A+ controls. */
+.detail-summary, .news-list,
+.member-list, .text-list, .vote-list, .action-list { max-width: 52rem; }
 .member-list, .text-list, .vote-list, .action-list { list-style: none; margin: 0; padding: 0; }
 .member-list li, .text-list li, .vote-list li { padding: 0.2rem 0; }
 .action-list li { padding: 0.25rem 0; border-bottom: 1px solid #1d2731; font-size: 0.88rem; }
