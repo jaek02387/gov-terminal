@@ -296,7 +296,19 @@ function highlightEvent(idx, on) {
     g.querySelectorAll(".ev-dot").forEach((d) => d.setAttribute("r", on ? "6" : "4"));
   });
   const li = host.querySelector(`#events-area .ev-item[data-idx="${idx}"]`);
-  if (li) li.classList.toggle("ev-active", on);  // no auto-scroll: it can yank the chart under the cursor
+  if (li) {
+    li.classList.toggle("ev-active", on);
+    // Reveal the row within its OWN scroll box only (never the overlay, which
+    // would move the chart out from under the cursor).
+    if (on) {
+      const list = li.closest(".ev-list");
+      if (list) {
+        const lr = list.getBoundingClientRect(), ir = li.getBoundingClientRect();
+        if (ir.top < lr.top) list.scrollTop -= lr.top - ir.top;
+        else if (ir.bottom > lr.bottom) list.scrollTop += ir.bottom - lr.bottom;
+      }
+    }
+  }
 }
 
 function wireMarkers(svg) {
