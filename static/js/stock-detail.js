@@ -13,6 +13,7 @@ let chartEvents = [];  // policy/contract events to mark on the chart
 let fullPoints = [];   // all points for the current range (zoom slices this)
 let zoomLo = 0, zoomHi = 0;  // visible index window into fullPoints
 const MIN_ZOOM = 4;    // don't zoom below ~5 points
+const ZOOM_SENSITIVITY = 0.0016;  // lower = slower/gentler trackpad zoom
 let activePopover = null;
 let _popDocHandler = null;  // outside-click listener while a popover is open
 let _popKeyHandler = null;  // Escape-closes-popover listener (capture phase)
@@ -220,7 +221,10 @@ function wireChartZoom(svg) {
       (pt.matrixTransform(ctm.inverse()).x - PADL) / (CW - PADL - PADR)));
     const curLen = zoomHi - zoomLo + 1;
     const anchor = zoomLo + f * (curLen - 1);       // index under the cursor
-    const factor = e.deltaY < 0 ? 0.82 : 1 / 0.82;  // scroll up / pinch out = zoom in
+    // Zoom proportional to scroll distance so it stays gentle and controllable
+    // no matter how fast the trackpad fires: scroll up / pinch out = zoom in.
+    const dy = e.deltaY * (e.deltaMode === 1 ? 16 : 1);  // normalize line-mode wheels
+    const factor = Math.min(1.1, Math.max(0.9, Math.exp(dy * ZOOM_SENSITIVITY)));
     let newLen = Math.round(curLen * factor);
     newLen = Math.max(MIN_ZOOM + 1, Math.min(fullPoints.length, newLen));
     if (newLen === curLen) return;
