@@ -18,6 +18,9 @@ let activePopover = null;
 let _popDocHandler = null;  // outside-click listener while a popover is open
 let _popKeyHandler = null;  // Escape-closes-popover listener (capture phase)
 let _zoomRaf = 0;           // coalesces rapid wheel events into one redraw
+// click-drag panning of the zoomed window (grab-and-drag along the time axis)
+let panDown = false, panActive = false, suppressClick = false;
+let panStartX = 0, panStartLo = 0, panWinLen = 0, panPlotPx = 1, _panRaf = 0;
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -142,6 +145,7 @@ function wireChartHover(svg) {
   const dateTxt = svg.querySelector(".cross-date");
 
   function onMove(e) {
+    if (panActive) return;  // don't draw the crosshair while dragging to pan
     const ctm = svg.getScreenCTM();
     if (!ctm) return;
     const pt = svg.createSVGPoint();
@@ -183,10 +187,56 @@ function drawVisible() {
   const svg = chartEl.querySelector("svg");
   wireChartHover(svg);
   wireChartZoom(svg);
+  wireChartPan(svg);
   wireMarkers(svg);
+  chartEl.classList.toggle("pannable", isZoomed());  // grab cursor when there's room to pan
   const rb = chartEl.querySelector(".zoom-reset");
   if (rb) rb.addEventListener("click", resetZoom);
   renderEvents(pts);
+}
+
+// Click-drag to pan the zoomed window along the time axis (grab-and-drag: the
+// chart follows the cursor). Only active when zoomed in. mousemove/up live on
+// window so the drag survives the per-frame SVG redraw.
+function wireChartPan(svg) {
+  if (!svg) return;
+  const chartEl = host && host.querySelector("#chart-area");
+  function onPanMove(e) {
+    if (!panDown) return;
+    const dx = e.clientX - panStartX;
+    if (!panActive) {
+      if (Math.abs(dx) < 4) return;   // threshold: below this it's a click, not a drag
+      panActive = true;
+      if (chartEl) chartEl.classList.add("panning");
+    }
+    // drag right (dx>0) reveals earlier data, so the chart slides right with the cursor
+    const indexDelta = Math.round((dx / panPlotPx) * (panWinLen - 1));
+    let lo = panStartLo - indexDelta;
+    lo = Math.max(0, Math.min(fullPoints.length - panWinLen, lo));
+    const hi = lo + panWinLen - 1;
+    if (lo === zoomLo && hi === zoomHi) return;
+    zoomLo = lo; zoomHi = hi;
+    if (!_panRaf) _panRaf = requestAnimationFrame(() => { _panRaf = 0; drawVisible(); });
+  }
+  function onPanUp() {
+    panDown = false;
+    window.removeEventListener("mousemove", onPanMove);
+    window.removeEventListener("mouseup", onPanUp);
+    if (chartEl) chartEl.classList.remove("panning");
+    if (panActive) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); }
+    panActive = false;
+  }
+  svg.addEventListener("mousedown", (e) => {
+    if (e.button !== 0 || !isZoomed()) return;   // left-button drags, and only when zoomed
+    panDown = true; panActive = false;
+    panStartX = e.clientX;
+    panStartLo = zoomLo;
+    panWinLen = zoomHi - zoomLo + 1;
+    const rect = svg.getBoundingClientRect();
+    panPlotPx = rect.width * (CW - PADL - PADR) / CW || 1;  // px width of the plotted area
+    window.addEventListener("mousemove", onPanMove);
+    window.addEventListener("mouseup", onPanUp);
+  });
 }
 
 // Entry point: load a fresh series, reset the zoom window, draw. The header
@@ -261,7 +311,11 @@ function wireMarkers(svg) {
     g.addEventListener("mouseleave", () => highlightEvent(idx, false));
     g.addEventListener("focus", () => highlightEvent(idx, true));
     g.addEventListener("blur", () => highlightEvent(idx, false));
-    g.addEventListener("click", (e) => { e.stopPropagation(); showPopover(idx, dot); });
+    g.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (suppressClick) return;  // this click ended a pan drag, not a real click
+      showPopover(idx, dot);
+    });
     g.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showPopover(idx, dot); }
     });
@@ -460,7 +514,7 @@ export async function open(bodyEl, tkr, name) {
       `</div>` +
       rangeBar(d.ranges || ["1D", "1W", "1M", "6M", "1Y", "5Y"]) +
       `<div id="chart-area" class="chart-area"></div>` +
-      `<div class="chart-hint muted">Scroll or pinch to zoom · double-click to reset · click a ● for details</div>` +
+      `<div class="chart-hint muted">Scroll to zoom · drag to pan · double-click to reset · click a ● for details</div>` +
       `<section class="detail-section"><h3>Policy &amp; contract events on this chart</h3>` +
       `<div id="events-area"></div></section>` +
       `<section class="detail-section"><h3>Key stats</h3>${statsGrid(d.stats || {})}</section>` +

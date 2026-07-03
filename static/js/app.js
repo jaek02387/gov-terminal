@@ -4,7 +4,7 @@
 
 // Version for cache-busting dynamically-imported modules (bump on JS changes;
 // keep in sync with the ?v= on index.html so a normal reload picks up new code).
-const ASSET_V = "14";
+const ASSET_V = "15";
 
 const indicator = document.getElementById("refresh-indicator");
 const dashboard = document.getElementById("dashboard");

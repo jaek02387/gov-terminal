@@ -618,6 +618,12 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 .ev-marker.ev-active .ev-line { opacity: 1; stroke-width: 1.6; }
 .ev-item.ev-active { background: #1c2a38; }
 
+/* Click-drag panning cursors (grab when zoomed, grabbing while dragging) */
+.chart-area.pannable .price-chart { cursor: grab; }
+.chart-area.panning, .chart-area.panning .price-chart, .chart-area.panning .ev-marker {
+  cursor: grabbing; user-select: none;
+}
+
 /* Reset-zoom affordance (shown only while zoomed) */
 .zoom-reset {
   position: absolute; top: 6px; right: 8px;
