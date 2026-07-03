@@ -4,7 +4,7 @@
 
 // Version for cache-busting dynamically-imported modules (bump on JS changes;
 // keep in sync with the ?v= on index.html so a normal reload picks up new code).
-const ASSET_V = "18";
+const ASSET_V = "19";
 
 const indicator = document.getElementById("refresh-indicator");
 const dashboard = document.getElementById("dashboard");
@@ -250,17 +250,47 @@ const billDetail = document.getElementById("bill-detail");
 const detailBody = document.getElementById("detail-body");
 const detailTitle = document.getElementById("detail-title");
 
+// Back-stack for the shared detail overlay so "Back" from a nested view (e.g. a
+// contract opened from a stock's events list) returns to the previous view
+// instead of closing the overlay all the way to the dashboard.
+let detailStack = [];      // reopeners for the views beneath the current one
+let detailCurrent = null;  // reopener for the view currently shown
+
+// Open a detail view in the overlay. If one is already showing, remember it so
+// Back returns to it. Each `reopen` re-renders its view into the overlay.
+function pushDetail(reopen) {
+  if (!billDetail.hidden && detailCurrent) detailStack.push(detailCurrent);
+  detailCurrent = reopen;
+  billDetail.hidden = false;
+  document.getElementById("detail-back").focus();
+  reopen();
+}
+
+// Back: step to the previous view if there is one, else close the overlay.
+function detailBack() {
+  if (detailStack.length) {
+    detailCurrent = detailStack.pop();
+    document.getElementById("detail-back").focus();
+    detailCurrent();
+  } else {
+    detailCurrent = null;
+    closeBillDetail();
+  }
+}
+
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
   );
 }
 
-async function openBillDetail(key, identifier) {
+function openBillDetail(key, identifier) {
+  pushDetail(() => renderBillView(key, identifier));
+}
+
+async function renderBillView(key, identifier) {
   detailTitle.textContent = identifier || "Bill detail";
   detailBody.innerHTML = `<p class="muted">Loading bill detail…</p>`;
-  billDetail.hidden = false;
-  document.getElementById("detail-back").focus();
   try {
     const res = await fetch(`/api/bills/detail/${encodeURIComponent(key)}`);
     const data = await res.json().catch(() => ({}));
@@ -286,6 +316,8 @@ function fmtMoney(n) {
 function closeBillDetail() {
   billDetail.hidden = true;
   detailBody.innerHTML = "";
+  detailStack = [];
+  detailCurrent = null;
 }
 
 function section(title, inner) {
@@ -374,20 +406,19 @@ function renderBillDetail(resp) {
   detailBody.innerHTML = html;
 }
 
-// Contract detail (from the Policy Timeline) — shows the Award Description.
-// The contract object is passed in the event (already cached on the timeline),
-// so no extra fetch is needed.
-window.addEventListener("open-contract-detail", (e) => {
-  const c = e.detail.contract || {};
+// Contract detail (award description). Opened from the Policy Timeline or from a
+// stock's events list; the contract object is passed in the event (already
+// cached), so no extra fetch is needed.
+function renderContractView(c) {
+  c = c || {};
   detailTitle.textContent = c.recipient || "Contract";
-  billDetail.hidden = false;
-  document.getElementById("detail-back").focus();
   const meta = [
     c.award_type && `Type: ${esc(c.award_type)}`,
     c.agency && `Agency: ${esc(c.agency)}`,
     c.date && `Updated: ${esc(c.date)}`,
   ].filter(Boolean).join(" · ");
-  let html = `<div class="detail-overview"><div class="detail-billtitle">${esc(c.recipient || "Contract")}</div>` +
+  detailBody.innerHTML =
+    `<div class="detail-overview"><div class="detail-billtitle">${esc(c.recipient || "Contract")}</div>` +
     (meta ? `<div class="muted">${meta}</div>` : "") +
     (c.url ? `<div><a href="${esc(c.url)}" target="_blank" rel="noopener">View on USASpending ↗</a></div>` : "") +
     `</div>` +
@@ -396,32 +427,31 @@ window.addEventListener("open-contract-detail", (e) => {
     `<div class="stat"><span class="stat-k">Outlays</span><span class="stat-v">${fmtMoney(c.outlays)}</span></div>` +
     `</div>` +
     section("Award description", `<p class="detail-summary">${esc(c.description || "No description provided.")}</p>`);
-  detailBody.innerHTML = html;
-});
+}
+window.addEventListener("open-contract-detail", (e) => pushDetail(() => renderContractView(e.detail.contract)));
 
-document.getElementById("detail-back").addEventListener("click", closeBillDetail);
+document.getElementById("detail-back").addEventListener("click", detailBack);
 window.addEventListener("open-bill-detail", (e) =>
   openBillDetail(e.detail.key, e.detail.identifier)
 );
 
 // Stock detail reuses the same overlay; its chart/news renderer is lazy-loaded.
 let stockDetailMod = null;
-window.addEventListener("open-stock-detail", async (e) => {
-  detailTitle.textContent = e.detail.name || e.detail.ticker || "Stock";
+async function renderStockView(ticker, name) {
+  detailTitle.textContent = name || ticker || "Stock";
   detailBody.innerHTML = `<p class="muted">Loading…</p>`;
-  billDetail.hidden = false;
-  document.getElementById("detail-back").focus();
   try {
     stockDetailMod = stockDetailMod || (await import(`/static/js/stock-detail.js?v=${ASSET_V}`));
-    await stockDetailMod.open(detailBody, e.detail.ticker, e.detail.name);
+    await stockDetailMod.open(detailBody, ticker, name);
   } catch (err) {
     detailBody.innerHTML = `<div class="error-box">Failed to load stock detail.</div>`;
   }
-});
+}
+window.addEventListener("open-stock-detail", (e) => pushDetail(() => renderStockView(e.detail.ticker, e.detail.name)));
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (!billDetail.hidden) closeBillDetail();   // topmost overlay closes first
+  if (!billDetail.hidden) detailBack();         // step back one view, then close
   else if (expandedId) closeExpanded();
 });
 

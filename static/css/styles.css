@@ -632,7 +632,8 @@ td.remove-cell, th .sr-only { width: 1.5rem; }
 
 /* Reset-zoom affordance (shown only while zoomed) */
 .zoom-reset {
-  position: absolute; top: 6px; right: 8px;
+  /* top-left: the price labels live in the right gutter, so this never covers them */
+  position: absolute; top: 6px; left: 8px;
   background: rgba(11, 15, 20, 0.85); color: var(--fg);
   border: 1px solid var(--panel-border); border-radius: 4px;
   font-size: 0.7rem; padding: 0.15rem 0.5rem; cursor: pointer;
